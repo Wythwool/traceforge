@@ -1,3 +1,3 @@
-"""TraceForge: read local files as bytes, extract facts, write case reports."""
+"""TraceForge: offline file inspection workbench."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
