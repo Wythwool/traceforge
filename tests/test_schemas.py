@@ -5,6 +5,7 @@ import json
 from traceforge import cli, core
 
 EXPECTED_SCHEMAS = {
+    "case-bundle",
     "case-index",
     "extract-manifest",
     "hunt",

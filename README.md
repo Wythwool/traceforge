@@ -45,6 +45,9 @@ traceforge ruleset export -o built-in-rules.json
 traceforge schema list
 traceforge schema show report
 traceforge schema export-all -o schemas
+traceforge bundle create CASE_DIR -o case.traceforge.zip
+traceforge bundle verify case.traceforge.zip
+traceforge bundle import case.traceforge.zip --cases-root .traceforge/cases
 traceforge carve FILE -o carved  # carve embedded artifacts into a folder
 traceforge extract FILE -o extracted
 traceforge extract FILE --resources --overlay -o extracted --json
@@ -144,8 +147,15 @@ with the matched cases, rule IDs, levels, and evidence.
 
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
-`extract_manifest.json`, and external rule sets. These schemas are intended for
-pipeline validation, typed clients, and long-lived case archives.
+`extract_manifest.json`, `bundle_manifest.json`, and external rule sets. These
+schemas are intended for pipeline validation, typed clients, and long-lived case
+archives.
+
+`traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
+for one stored case. The bundle contains a `bundle_manifest.json` with every
+case file path, size, and SHA-256. `traceforge bundle verify` checks the bundle
+before use, and `traceforge bundle import` restores it into a cases root. Import
+does not replace an existing case unless `--overwrite` is provided.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,

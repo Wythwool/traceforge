@@ -171,6 +171,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="destination directory",
     )
 
+    bundle = sub.add_parser("bundle", help="create, verify, or import case bundles")
+    bundle_sub = bundle.add_subparsers(dest="bundle_command", required=True)
+    bundle_create = bundle_sub.add_parser("create", help="write a portable case bundle")
+    bundle_create.add_argument("case_dir", type=Path, help="path to an existing case folder")
+    bundle_create.add_argument("-o", "--output", type=Path, help="destination zip file")
+    bundle_create.add_argument("--json", action="store_true", help="print full JSON output")
+    bundle_verify = bundle_sub.add_parser("verify", help="verify a case bundle")
+    bundle_verify.add_argument("bundle", type=Path, help="path to a case bundle")
+    bundle_verify.add_argument("--json", action="store_true", help="print full JSON output")
+    bundle_import = bundle_sub.add_parser("import", help="import a verified case bundle")
+    bundle_import.add_argument("bundle", type=Path, help="path to a case bundle")
+    bundle_import.add_argument(
+        "--cases-root",
+        type=Path,
+        default=core.default_cases_root(),
+        help="destination cases root; defaults to .traceforge/cases",
+    )
+    bundle_import.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing case with the same case ID",
+    )
+    bundle_import.add_argument("--json", action="store_true", help="print full JSON output")
+
     carve = sub.add_parser("carve", help="carve embedded artifacts from one file")
     carve.add_argument("file", type=Path, help="path to a regular file")
     carve.add_argument(
@@ -518,6 +542,49 @@ def _cmd_schema(args: argparse.Namespace) -> int:
         return _fail(f"could not write schema: {exc}")
 
 
+def _cmd_bundle(args: argparse.Namespace) -> int:
+    try:
+        if args.bundle_command == "create":
+            if not (args.case_dir / "report.json").is_file():
+                return _fail(f"no report.json in {args.case_dir}; run 'traceforge scan' first")
+            path = core.create_case_bundle(args.case_dir, args.output)
+            payload = core.verify_case_bundle(path)
+            if args.json:
+                print(json.dumps(payload, indent=2))
+                return 0
+            print(f"wrote {path}")
+            print(f"case {payload['case_id']} files={payload['verified_count']}")
+            return 0
+
+        if args.bundle_command == "verify":
+            payload = core.verify_case_bundle(args.bundle)
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            elif payload["valid"]:
+                print(
+                    f"bundle valid: {payload['case_id']} "
+                    f"files={payload['verified_count']}"
+                )
+            else:
+                print(f"bundle invalid: {args.bundle}", file=sys.stderr)
+                for error in payload["errors"]:
+                    print(f"- {error}", file=sys.stderr)
+            return 0 if payload["valid"] else 1
+
+        payload = core.import_case_bundle(
+            args.bundle,
+            args.cases_root,
+            overwrite=args.overwrite,
+        )
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not process bundle: {exc}")
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"imported {payload['case_id']} to {payload['case_dir']}")
+    return 0
+
+
 def _cmd_carve(path: Path, output: Path) -> int:
     if not path.is_file():
         return _fail(f"not a regular file: {path}")
@@ -782,6 +849,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ruleset(args)
     if args.command == "schema":
         return _cmd_schema(args)
+    if args.command == "bundle":
+        return _cmd_bundle(args)
     if args.command == "carve":
         return _cmd_carve(args.file, args.output)
     if args.command == "extract":

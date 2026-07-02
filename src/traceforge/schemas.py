@@ -54,6 +54,57 @@ def _document(name: str, title: str, description: str, schema: dict[str, Any]) -
 
 
 SCHEMAS: dict[str, dict[str, Any]] = {
+    "case-bundle": _document(
+        "case-bundle",
+        "TraceForge case bundle manifest",
+        "Portable case bundle manifest stored as bundle_manifest.json.",
+        {
+            "type": "object",
+            "required": [
+                "kind",
+                "schema_version",
+                "created_utc",
+                "tool",
+                "tool_version",
+                "case_id",
+                "file_count",
+                "total_size",
+                "files",
+            ],
+            "properties": {
+                "kind": {"const": "traceforge.case-bundle"},
+                "schema_version": {"const": 1},
+                "created_utc": {"$ref": "#/$defs/utcTimestamp"},
+                "tool": {"const": "traceforge"},
+                "tool_version": {"type": "string"},
+                "case_id": {"type": "string", "minLength": 1},
+                "file_count": {"$ref": "#/$defs/count"},
+                "total_size": {"$ref": "#/$defs/count"},
+                "files": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/bundledFile"},
+                },
+            },
+            "$defs": {
+                **copy.deepcopy(_COMMON_DEFS),
+                "bundledFile": {
+                    "type": "object",
+                    "required": ["path", "size", "sha256"],
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "minLength": 1,
+                            "not": {"pattern": r"(^/|^[A-Za-z]:|(^|/)\.\.(/|$))"},
+                        },
+                        "size": {"$ref": "#/$defs/count"},
+                        "sha256": {"$ref": "#/$defs/sha256"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            "additionalProperties": False,
+        },
+    ),
     "case-index": _document(
         "case-index",
         "TraceForge case index",

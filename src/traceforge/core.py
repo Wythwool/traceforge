@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from traceforge import __version__, case_db, schemas, workspace
+from traceforge import __version__, bundles, case_db, schemas, workspace
 from traceforge import ruleset as ruleset_tools
 from traceforge.annotations import (
     ensure_annotations,
@@ -459,6 +459,32 @@ def export_schema(name: str, output: Path) -> Path:
 def export_all_schemas(output_dir: Path) -> list[Path]:
     """Write every built-in JSON Schema to a directory."""
     return schemas.export_all_schemas(output_dir)
+
+
+def create_case_bundle(case_dir: Path, output: Path | None = None) -> Path:
+    """Write a portable zip bundle for a case directory."""
+    return bundles.create_case_bundle(case_dir, output)
+
+
+def build_bundle_manifest(case_dir: Path) -> dict:
+    """Build a portable case bundle manifest."""
+    return bundles.build_bundle_manifest(case_dir)
+
+
+def verify_case_bundle(bundle: Path) -> dict:
+    """Verify a portable case bundle."""
+    return bundles.verify_case_bundle(bundle)
+
+
+def import_case_bundle(
+    bundle: Path,
+    cases_root: Path | None = None,
+    *,
+    overwrite: bool = False,
+) -> dict:
+    """Import a verified case bundle into a cases root."""
+    root = cases_root if cases_root is not None else default_cases_root()
+    return bundles.import_case_bundle(bundle, root, overwrite=overwrite)
 
 
 def build_cases_index(cases_root: Path | None = None) -> dict:
