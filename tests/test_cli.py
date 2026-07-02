@@ -218,6 +218,16 @@ def test_index_and_diff_commands(tmp_path, monkeypatch):
     assert "workspace-data" in (cases_root / "workspace.html").read_text(
         encoding="utf-8"
     )
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        '{"rules":[{"id":"custom.left","name":"Left","any":[{"contains":"left marker"}]}]}',
+        encoding="utf-8",
+    )
+    hunt_output = tmp_path / "hunt"
+    assert cli.main(["hunt", str(cases_root), "--rules", str(rules), "-o", str(hunt_output)]) == 0
+    assert (hunt_output / "hunt.json").is_file()
+    assert (hunt_output / "hunt.csv").is_file()
+    assert (hunt_output / "hunt.md").is_file()
 
     cases = case_dirs(tmp_path)
     output = tmp_path / "comparison"

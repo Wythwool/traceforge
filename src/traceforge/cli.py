@@ -190,6 +190,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="case storage root; defaults to .traceforge/cases",
     )
 
+    hunt = sub.add_parser("hunt", help="evaluate rules across stored cases")
+    hunt.add_argument(
+        "cases_root",
+        nargs="?",
+        type=Path,
+        default=core.default_cases_root(),
+        help="case storage root; defaults to .traceforge/cases",
+    )
+    hunt.add_argument(
+        "--rules",
+        dest="rules_path",
+        type=Path,
+        help="optional JSON rule file; built-in rules are used when omitted",
+    )
+    hunt.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="output directory for hunt.json, hunt.csv, and hunt.md",
+    )
+
     diff = sub.add_parser("diff", help="compare two case folders")
     diff.add_argument("left_case_dir", type=Path, help="first case folder")
     diff.add_argument("right_case_dir", type=Path, help="second case folder")
@@ -478,6 +499,26 @@ def _cmd_workspace(cases_root: Path) -> int:
     return 0
 
 
+def _cmd_hunt(
+    cases_root: Path,
+    rules_path: Path | None,
+    output: Path | None,
+) -> int:
+    if not cases_root.exists():
+        return _fail(f"cases root does not exist: {cases_root}")
+    if not cases_root.is_dir():
+        return _fail(f"not a directory: {cases_root}")
+    if rules_path is not None and not rules_path.is_file():
+        return _fail(f"rule file not found: {rules_path}")
+    try:
+        paths = core.write_case_hunt(cases_root, rules_path, output)
+    except (OSError, ValueError, json.JSONDecodeError, re.error) as exc:
+        return _fail(f"could not run hunt: {exc}")
+    for path in paths:
+        print(f"wrote {path}")
+    return 0
+
+
 def _cmd_diff(
     left_case_dir: Path, right_case_dir: Path, output: Path | None = None
 ) -> int:
@@ -525,4 +566,6 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_index(args.cases_root)
     if args.command == "workspace":
         return _cmd_workspace(args.cases_root)
+    if args.command == "hunt":
+        return _cmd_hunt(args.cases_root, args.rules_path, args.output)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)

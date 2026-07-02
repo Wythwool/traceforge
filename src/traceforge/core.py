@@ -23,6 +23,7 @@ from traceforge.artifacts import write_case_artifacts
 from traceforge.code_map import inspect_code
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
+from traceforge.hunt import write_hunt
 from traceforge.reports import (
     write_all_reports,
     write_indicator_exports,
@@ -370,6 +371,16 @@ def write_workspace_browser(cases_root: Path | None = None) -> list[Path]:
     index = json.loads(index_path.read_text(encoding="utf-8"))
     viewer_path = write_workspace_viewer(root, index)
     return [index_path, viewer_path]
+
+
+def write_case_hunt(
+    cases_root: Path | None = None,
+    rules_path: Path | None = None,
+    output_dir: Path | None = None,
+) -> list[Path]:
+    """Run a rule hunt across stored cases and write report files."""
+    root = cases_root if cases_root is not None else default_cases_root()
+    return write_hunt(root, rules_path, output_dir)
 
 
 def build_cases_index(cases_root: Path | None = None) -> dict:

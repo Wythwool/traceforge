@@ -51,6 +51,8 @@ traceforge code FILE --decoder capstone --blocks-csv blocks.csv
 traceforge code FILE --xrefs-csv xrefs.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge workspace             # write case_index.json and workspace.html
+traceforge hunt                  # evaluate built-in rules across stored cases
+traceforge hunt --rules rules.json -o hunt-out
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
 
@@ -117,6 +119,10 @@ basic-block and edge counts, xref count, and embedded artifact count.
 status/format/tag filters, case metrics, latest-note previews, and links into
 each case viewer, report, summary, and annotation log.
 
+`traceforge hunt` evaluates built-in or JSON-defined rules against every stored
+case report in a cases root. It writes `hunt.json`, `hunt.csv`, and `hunt.md`
+with the matched cases, rule IDs, levels, and evidence.
+
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
@@ -136,6 +142,7 @@ traceforge annotate CASE_DIR --tag packed --tag needs-symbols
 traceforge annotate CASE_DIR --note "Check the imported crypto APIs" --title "Next step"
 traceforge annotate CASE_DIR
 traceforge workspace
+traceforge hunt --rules rules.json
 ```
 
 The command rewrites `annotations.json`, `annotations.md`, and `viewer.html`.
@@ -168,6 +175,10 @@ External rules are JSON:
 Supported condition keys: `format_kind`, `indicator_type`, `regex`,
 `contains`, `hex`, `high_entropy_chunks_at_least`, `pe_observation`,
 `container_entry_suffix`, and `embedded_artifact`.
+
+The same rule files can be used with `traceforge rules FILE --rules rules.json`
+for one file or `traceforge hunt CASES_ROOT --rules rules.json` for an existing
+case workspace.
 
 ## Example
 
