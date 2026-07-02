@@ -1,9 +1,9 @@
 """Graph construction for TraceForge cases.
 
-Node types: sample, format, section, import, export, chunk, string, indicator,
-rule_match, embedded_artifact, finding.
+Node types: sample, format, section, import, export, symbol, chunk, string,
+indicator, rule_match, embedded_artifact, finding.
 Edge types: contains, references, has_indicator, has_finding, has_format,
-has_rule, imports, exports, embeds.
+has_rule, imports, exports, defines, embeds.
 """
 
 # Caps keep graph.json readable for very large inputs.
@@ -11,6 +11,7 @@ MAX_GRAPH_STRINGS_PER_SOURCE = 200
 MAX_GRAPH_CHUNKS = 256
 MAX_GRAPH_IMPORTS = 256
 MAX_GRAPH_EXPORTS = 256
+MAX_GRAPH_SYMBOLS = 256
 MAX_GRAPH_SECTIONS = 256
 LABEL_MAX = 80
 
@@ -20,6 +21,7 @@ NODE_TYPES = (
     "section",
     "import",
     "export",
+    "symbol",
     "chunk",
     "string",
     "indicator",
@@ -36,6 +38,7 @@ EDGE_TYPES = (
     "has_rule",
     "imports",
     "exports",
+    "defines",
     "embeds",
 )
 
@@ -194,7 +197,10 @@ def _add_format_nodes(
         )
         edges.append({"source": sample_id, "target": node_id, "type": "contains"})
 
+    symbol_info = extraction.get("symbols", {})
     imports = _flatten_imports(details.get("imports", []))
+    imports.extend(_flatten_imports(symbol_info.get("imports", [])))
+    imports = _dedupe_values(imports)
     for index, item in enumerate(imports[:MAX_GRAPH_IMPORTS]):
         node_id = f"import:{index}"
         nodes.append(
@@ -208,6 +214,8 @@ def _add_format_nodes(
         edges.append({"source": sample_id, "target": node_id, "type": "imports"})
 
     exports = _flatten_exports(details.get("exports", []))
+    exports.extend(_flatten_exports(symbol_info.get("exports", [])))
+    exports = _dedupe_values(exports)
     for index, item in enumerate(exports[:MAX_GRAPH_EXPORTS]):
         node_id = f"export:{index}"
         nodes.append(
@@ -219,6 +227,26 @@ def _add_format_nodes(
             }
         )
         edges.append({"source": sample_id, "target": node_id, "type": "exports"})
+
+    for index, item in enumerate(symbol_info.get("symbols", [])[:MAX_GRAPH_SYMBOLS]):
+        name = item.get("name", "")
+        if not name:
+            continue
+        node_id = f"symbol:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "symbol",
+                "label": _short(name),
+                "name": name,
+                "kind": item.get("kind", item.get("type", "")),
+                "binding": item.get("binding", ""),
+                "section": item.get("section", item.get("section_index", "")),
+                "undefined": item.get("undefined", ""),
+                "value": item.get("value", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "defines"})
 
     for index, artifact in enumerate(extraction.get("format", {}).get("embedded", [])):
         node_id = f"embedded:{index}"
@@ -253,6 +281,18 @@ def _flatten_imports(imports: list) -> list[str]:
         elif "name" in item:
             values.append(item["name"])
     return values
+
+
+def _dedupe_values(values: list[str]) -> list[str]:
+    seen = set()
+    unique = []
+    for value in values:
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(value)
+    return unique
 
 
 def _flatten_exports(exports: list) -> list[str]:
