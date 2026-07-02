@@ -525,10 +525,19 @@ def _code_html(code_info: dict) -> str:
         parts.append("<h3>Code xrefs</h3>")
         parts.append(
             _table(
-                ("kind", "source", "source function", "target", "target kind", "target name"),
+                (
+                    "kind",
+                    "indirect",
+                    "source",
+                    "source function",
+                    "target",
+                    "target kind",
+                    "target name",
+                ),
                 [
                     (
                         item.get("kind", ""),
+                        item.get("indirect", ""),
                         _hex_or_empty(item.get("source")),
                         item.get("source_function", ""),
                         _hex_or_empty(item.get("target")),

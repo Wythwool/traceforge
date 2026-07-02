@@ -435,11 +435,14 @@ def _add_code_nodes(
                 "type": "code_xref",
                 "label": _short(f"{item.get('kind', 'xref')} 0x{source:x} -> 0x{target:x}"),
                 "kind": item.get("kind", ""),
+                "indirect": item.get("indirect", False),
                 "source": source,
                 "source_function": item.get("source_function", ""),
                 "target": target,
                 "target_kind": item.get("target_kind", ""),
                 "target_name": item.get("target_name", ""),
+                "target_library": item.get("target_library", ""),
+                "target_import": item.get("target_import", ""),
                 "target_range": item.get("target_range", ""),
             }
         )

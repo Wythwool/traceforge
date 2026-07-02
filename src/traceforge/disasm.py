@@ -6,6 +6,8 @@ import re
 from typing import Any
 
 _DIRECT_TARGET_RE = re.compile(r"-?(?:0x[0-9a-fA-F]+|\d+)")
+_RIP_REL_RE = re.compile(r"\[(?:rip|eip)(?:\s*([+-])\s*(0x[0-9a-fA-F]+|\d+))?\]")
+_ABS_MEM_RE = re.compile(r"\[(?:[a-z]+ ptr )?(0x[0-9a-fA-F]+|\d+)\]")
 
 
 def decode_with_capstone(
@@ -61,8 +63,14 @@ def decode_with_capstone(
                 "decoder": "capstone",
             }
             target = _direct_target(mnemonic, operands)
+            indirect = False
+            if target is None:
+                target = _memory_target(mnemonic, operands, insn.address, insn.size, architecture)
+                indirect = target is not None
             if target is not None:
                 item["target"] = target
+                if indirect:
+                    item["indirect"] = True
                 edges.append(
                     {
                         "source": insn.address,
@@ -70,6 +78,7 @@ def decode_with_capstone(
                         "kind": _edge_kind(mnemonic),
                         "source_offset": offset,
                         "range": code_range.get("name", ""),
+                        "indirect": indirect,
                     }
                 )
             instructions.append(item)
@@ -115,6 +124,31 @@ def _direct_target(mnemonic: str, operands: str) -> int | None:
     if not _DIRECT_TARGET_RE.fullmatch(first):
         return None
     return int(first, 0)
+
+
+def _memory_target(
+    mnemonic: str,
+    operands: str,
+    address: int,
+    size: int,
+    architecture: str,
+) -> int | None:
+    if not _is_control_transfer(mnemonic):
+        return None
+    first = operands.split(",", 1)[0].strip().lower()
+    if architecture == "x86_64":
+        match = _RIP_REL_RE.search(first)
+        if match:
+            sign, raw = match.groups()
+            displacement = int(raw, 0) if raw else 0
+            if sign == "-":
+                displacement = -displacement
+            return address + size + displacement
+    if architecture == "x86":
+        match = _ABS_MEM_RE.search(first)
+        if match:
+            return int(match.group(1), 0)
+    return None
 
 
 def _is_control_transfer(mnemonic: str) -> bool:

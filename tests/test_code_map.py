@@ -5,6 +5,7 @@ import struct
 
 from traceforge import cli, core
 from traceforge.code_map import inspect_code, write_blocks_csv, write_code_csv, write_xrefs_csv
+from traceforge.formats import analyze_format
 
 
 def build_pe_with_call() -> bytes:
@@ -40,6 +41,70 @@ def build_pe_with_call() -> bytes:
     return bytes(data)
 
 
+def build_pe_with_import_call() -> bytes:
+    data = bytearray(2048)
+    image_base = 0x140000000
+    data[0:2] = b"MZ"
+    struct.pack_into("<I", data, 0x3C, 0x80)
+    data[0x80:0x84] = b"PE\x00\x00"
+    coff = 0x84
+    struct.pack_into("<HHIIIHH", data, coff, 0x8664, 2, 0x12345678, 0, 0, 0xF0, 0x2022)
+    opt = coff + 20
+    struct.pack_into("<H", data, opt, 0x20B)
+    struct.pack_into("<I", data, opt + 16, 0x1000)
+    struct.pack_into("<Q", data, opt + 24, image_base)
+    struct.pack_into("<II", data, opt + 56, 0x3000, 0x400)
+    struct.pack_into("<HH", data, opt + 68, 3, 0x8140)
+    directories = opt + 112
+    struct.pack_into("<II", data, directories + 8, 0x2000, 0x80)
+
+    section = opt + 0xF0
+    data[section : section + 8] = b".text\x00\x00\x00"
+    struct.pack_into(
+        "<IIIIIIHHI",
+        data,
+        section + 8,
+        0x200,
+        0x1000,
+        0x200,
+        0x200,
+        0,
+        0,
+        0,
+        0,
+        0x60000020,
+    )
+    idata = section + 40
+    data[idata : idata + 8] = b".idata\x00\x00"
+    struct.pack_into(
+        "<IIIIIIHHI",
+        data,
+        idata + 8,
+        0x200,
+        0x2000,
+        0x200,
+        0x400,
+        0,
+        0,
+        0,
+        0,
+        0x40000040,
+    )
+
+    iat_address = image_base + 0x2060
+    displacement = iat_address - (image_base + 0x1000 + 6)
+    data[0x200:0x207] = b"\xff\x15" + struct.pack("<i", displacement) + b"\xc3"
+
+    struct.pack_into("<IIIII", data, 0x400, 0x2040, 0, 0, 0x2080, 0x2060)
+    struct.pack_into("<IIIII", data, 0x414, 0, 0, 0, 0, 0)
+    struct.pack_into("<QQ", data, 0x440, 0x20A0, 0)
+    struct.pack_into("<QQ", data, 0x460, 0x20A0, 0)
+    data[0x480:0x48D] = b"KERNEL32.dll\x00"
+    struct.pack_into("<H", data, 0x4A0, 0)
+    data[0x4A2:0x4AE] = b"ExitProcess\x00"
+    return bytes(data)
+
+
 def test_inspect_code_maps_pe_entry_and_call_target():
     result = inspect_code(build_pe_with_call(), "sample.exe")
 
@@ -57,6 +122,23 @@ def test_inspect_code_maps_pe_entry_and_call_target():
     assert result["xrefs"][0]["target_kind"] == "function"
     assert result["xrefs"][0]["target_name"] == "sub_140001008"
     assert result["edges"][0]["target_name"] == "sub_140001008"
+
+
+def test_indirect_import_call_resolves_iat_xref():
+    format_info = analyze_format(build_pe_with_import_call(), "imports.exe")
+    symbol = format_info["details"]["imports"][0]["symbols"][0]
+    assert symbol["iat_rva"] == 0x2060
+    assert symbol["iat_address"] == 0x140002060
+
+    result = inspect_code(build_pe_with_import_call(), "imports.exe", decoder="builtin")
+
+    assert result["instructions"][0]["mnemonic"] == "call"
+    assert result["instructions"][0]["indirect"] is True
+    assert result["xrefs"][0]["indirect"] is True
+    assert result["xrefs"][0]["target_kind"] == "import"
+    assert result["xrefs"][0]["target_name"] == "KERNEL32.dll!ExitProcess"
+    assert result["xrefs"][0]["target_library"] == "KERNEL32.dll"
+    assert result["edges"][0]["target_name"] == "KERNEL32.dll!ExitProcess"
 
 
 def test_write_code_csv(tmp_path):

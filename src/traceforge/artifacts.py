@@ -211,7 +211,7 @@ def _write_debug_csv(path: Path, report: dict) -> Path:
 def _write_imports_csv(path: Path, report: dict) -> Path:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["library", "module", "name", "kind", "ordinal"])
+        writer.writerow(["library", "module", "name", "kind", "ordinal", "iat_rva", "iat_address"])
         for row in _import_rows(report):
             writer.writerow(row)
     return path
@@ -318,12 +318,12 @@ def _import_rows(report: dict) -> list[list[object]]:
     rows = []
     for item in imports:
         if isinstance(item, str):
-            rows.append([item, "", "", "", ""])
+            rows.append([item, "", "", "", "", "", ""])
         elif "library" in item:
             library = item.get("library", "")
             symbols = item.get("symbols", [])
             if not symbols:
-                rows.append([library, "", "", "", ""])
+                rows.append([library, "", "", "", "", "", ""])
             for symbol in symbols:
                 rows.append(
                     [
@@ -332,6 +332,8 @@ def _import_rows(report: dict) -> list[list[object]]:
                         symbol.get("name", ""),
                         "",
                         symbol.get("ordinal", ""),
+                        symbol.get("iat_rva", ""),
+                        symbol.get("iat_address", ""),
                     ]
                 )
         else:
@@ -342,6 +344,8 @@ def _import_rows(report: dict) -> list[list[object]]:
                     item.get("name", ""),
                     item.get("kind", ""),
                     item.get("ordinal", ""),
+                    "",
+                    "",
                 ]
             )
     return rows

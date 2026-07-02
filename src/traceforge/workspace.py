@@ -441,7 +441,8 @@ def _xref_values(extraction: dict) -> set[str]:
         if isinstance(source, int) and isinstance(target, int):
             values.add(
                 f"{item.get('kind', '')}:{source:x}->{target:x}:"
-                f"{item.get('target_kind', '')}:{item.get('target_name', '')}".lower()
+                f"{item.get('target_kind', '')}:{item.get('target_name', '')}:"
+                f"{item.get('indirect', False)}".lower()
             )
     return values
 

@@ -328,7 +328,7 @@ def parse_pe(data: bytes) -> dict:
     directories = _parse_pe_directories(data, directory_offset, optional_size - (directory_offset - opt))
     sections = _parse_pe_sections(data, opt + optional_size, section_count)
     entry_section = _section_for_rva(sections, entry_rva)
-    imports = _parse_pe_imports(data, sections, directories.get("import"), is_pe64)
+    imports = _parse_pe_imports(data, sections, directories.get("import"), is_pe64, image_base)
     exports = _parse_pe_exports(data, sections, directories.get("export"))
     resources = _parse_pe_resources(data, sections, directories.get("resource"))
     debug = _parse_pe_debug(data, sections, directories.get("debug"))
@@ -561,7 +561,13 @@ def _parse_pe_sections(data: bytes, offset: int, count: int) -> list[dict]:
     return sections
 
 
-def _parse_pe_imports(data: bytes, sections: list[dict], directory: dict | None, is_pe64: bool) -> list[dict]:
+def _parse_pe_imports(
+    data: bytes,
+    sections: list[dict],
+    directory: dict | None,
+    is_pe64: bool,
+    image_base: int,
+) -> list[dict]:
     if not directory or not directory.get("rva"):
         return []
     offset = _rva_to_offset(sections, directory["rva"])
@@ -589,12 +595,35 @@ def _parse_pe_imports(data: bytes, sections: list[dict], directory: dict | None,
                 thunk_value = _u64(data, item, "<") if is_pe64 else _u32(data, item, "<")
                 if thunk_value == 0:
                     break
-                name_offset = _rva_to_offset(sections, thunk_value & 0x7FFFFFFFFFFFFFFF)
+                iat_rva = first_thunk + thunk_index * thunk_size
+                ordinal_flag = 1 << (63 if is_pe64 else 31)
+                if thunk_value & ordinal_flag:
+                    ordinal = thunk_value & 0xFFFF
+                    symbols.append(
+                        {
+                            "name": f"ordinal_{ordinal}",
+                            "ordinal": ordinal,
+                            "iat_rva": iat_rva,
+                            "iat_address": image_base + iat_rva,
+                            "thunk_rva": (original_thunk or first_thunk) + thunk_index * thunk_size,
+                        }
+                    )
+                    continue
+                name_offset = _rva_to_offset(sections, thunk_value)
                 if name_offset is None or name_offset + 2 >= len(data):
                     continue
+                hint = _u16(data, name_offset, "<")
                 name = _read_c_string(data, name_offset + 2)
                 if name:
-                    symbols.append({"name": name})
+                    symbols.append(
+                        {
+                            "name": name,
+                            "hint": hint,
+                            "iat_rva": iat_rva,
+                            "iat_address": image_base + iat_rva,
+                            "thunk_rva": (original_thunk or first_thunk) + thunk_index * thunk_size,
+                        }
+                    )
         imports.append({"library": dll_name, "symbols": symbols})
     return imports
 

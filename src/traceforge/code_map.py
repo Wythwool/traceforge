@@ -102,7 +102,7 @@ def inspect_code(
     instructions, edges, decoder_info = _decode_ranges(data, ranges, architecture, decoder)
     functions = _function_candidates(format_info, symbol_info, ranges, instructions)
     basic_blocks = _basic_blocks(ranges, instructions, edges)
-    xrefs = _code_xrefs(ranges, functions, instructions, edges)
+    xrefs = _code_xrefs(format_info, ranges, functions, instructions, edges)
     return {
         "file_name": filename,
         "format": format_info.get("kind", "raw"),
@@ -184,6 +184,7 @@ def write_xrefs_csv(path: Path, payload: dict) -> Path:
         writer.writerow(
             [
                 "kind",
+                "indirect",
                 "source",
                 "source_offset",
                 "source_function",
@@ -199,6 +200,7 @@ def write_xrefs_csv(path: Path, payload: dict) -> Path:
             writer.writerow(
                 [
                     item.get("kind", ""),
+                    item.get("indirect", ""),
                     _hex_or_empty(item.get("source")),
                     _hex_or_empty(item.get("source_offset")),
                     item.get("source_function", ""),
@@ -436,15 +438,16 @@ def _decode_ranges(
             decoded = _decode_instruction(data, offset, item, architecture)
             instructions.append(decoded)
             if decoded.get("target") is not None:
-                edges.append(
-                    {
-                        "source": decoded["address"],
-                        "target": decoded["target"],
-                        "kind": "call" if decoded["mnemonic"] == "call" else "branch",
-                        "source_offset": decoded["offset"],
-                        "range": item["name"],
-                    }
-                )
+                edge = {
+                    "source": decoded["address"],
+                    "target": decoded["target"],
+                    "kind": "call" if decoded["mnemonic"] == "call" else "branch",
+                    "source_offset": decoded["offset"],
+                    "range": item["name"],
+                }
+                if decoded.get("indirect"):
+                    edge["indirect"] = True
+                edges.append(edge)
             offset += max(decoded["size"], 1)
             count += 1
             if count >= MAX_INSTRUCTIONS_PER_RANGE:
@@ -520,6 +523,25 @@ def _decode_x86(data: bytes, offset: int, address: int, name: str, is_64: bool) 
             f"0x{target:x}",
             data[offset:offset + 5],
             target,
+        )
+    if byte == 0xFF and offset + 6 <= len(data) and data[offset + 1] in {0x15, 0x25}:
+        operand = data[offset + 1]
+        if is_64:
+            rel = struct.unpack_from("<i", data, offset + 2)[0]
+            target = address + 6 + rel
+        else:
+            target = struct.unpack_from("<I", data, offset + 2)[0]
+        mnemonic = "call" if operand == 0x15 else "jmp"
+        return _instruction(
+            name,
+            offset,
+            address,
+            6,
+            mnemonic,
+            f"{'qword' if is_64 else 'dword'} ptr [0x{target:x}]",
+            data[offset:offset + 6],
+            target,
+            indirect=True,
         )
     if byte == 0xE9 and offset + 5 <= len(data):
         rel = struct.unpack_from("<i", data, offset + 1)[0]
@@ -605,6 +627,7 @@ def _instruction(
     operands: str,
     raw: bytes,
     target: int | None = None,
+    indirect: bool = False,
 ) -> dict:
     item = {
         "range": code_range,
@@ -617,6 +640,8 @@ def _instruction(
     }
     if target is not None:
         item["target"] = target
+    if indirect:
+        item["indirect"] = True
     return item
 
 
@@ -770,6 +795,7 @@ def _ends_block(mnemonic: str) -> bool:
 
 
 def _code_xrefs(
+    format_info: dict,
     ranges: list[dict],
     functions: list[dict],
     instructions: list[dict],
@@ -790,6 +816,7 @@ def _code_xrefs(
         for item in functions
         if isinstance(item.get("address"), int)
     }
+    imports_by_address = _import_targets(format_info)
     xrefs = []
     for index, edge in enumerate(edges[:MAX_XREFS]):
         source = edge.get("source")
@@ -798,10 +825,11 @@ def _code_xrefs(
             continue
         instruction = by_address.get(source, {})
         source_function = _function_name_for_address(source, function_starts, functions_by_address)
-        target_info = _target_info(target, ranges, functions_by_address)
+        target_info = _target_info(target, ranges, functions_by_address, imports_by_address)
         xref = {
             "index": index,
             "kind": edge.get("kind", ""),
+            "indirect": bool(edge.get("indirect")),
             "source": source,
             "source_offset": edge.get("source_offset"),
             "source_range": edge.get("range", ""),
@@ -828,7 +856,18 @@ def _target_info(
     target: int,
     ranges: list[dict],
     functions_by_address: dict[int, dict],
+    imports_by_address: dict[int, dict],
 ) -> dict:
+    imported = imports_by_address.get(target)
+    if imported is not None:
+        return {
+            "target_kind": "import",
+            "target_name": imported.get("display", ""),
+            "target_range": "iat",
+            "target_offset": None,
+            "target_library": imported.get("library", ""),
+            "target_import": imported.get("name", ""),
+        }
     resolved = _resolve_address(target, ranges)
     function = functions_by_address.get(target)
     if function is not None:
@@ -851,6 +890,23 @@ def _target_info(
         "target_range": "",
         "target_offset": None,
     }
+
+
+def _import_targets(format_info: dict) -> dict[int, dict]:
+    details = format_info.get("details", {})
+    targets = {}
+    for item in details.get("imports", []):
+        library = item.get("library", "")
+        for symbol in item.get("symbols", []):
+            address = symbol.get("iat_address")
+            name = symbol.get("name") or f"ordinal_{symbol.get('ordinal')}"
+            if isinstance(address, int) and name:
+                targets[address] = {
+                    "library": library,
+                    "name": name,
+                    "display": f"{library}!{name}" if library else name,
+                }
+    return targets
 
 
 def _function_name_for_address(

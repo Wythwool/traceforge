@@ -58,9 +58,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - URLs, domains, IPv4 values, file paths, registry-style paths
 - Overall entropy, byte-window entropy, and 4096-byte chunk entropy
 - Format metadata for PE, ELF, Mach-O, ZIP/APK/JAR, and WebAssembly
-- PE sections with permissions, entropy, hashes, imports, exports, directories,
-  resources, CodeView/PDB debug records, TLS callbacks, Authenticode certificate
-  table records, overlay metadata, entry point, subsystem, and observations
+- PE sections with permissions, entropy, hashes, imports with IAT addresses,
+  exports, directories, resources, CodeView/PDB debug records, TLS callbacks,
+  Authenticode certificate table records, overlay metadata, entry point,
+  subsystem, and observations
 - ELF program headers, sections, permissions, and header metadata
 - Mach-O load commands, linked libraries, segments, sections, and header metadata
 - ZIP/APK/JAR entries, APK permissions when visible, DEX/native-library counts,
@@ -74,7 +75,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
   blocks, call/branch edges, and bounded instruction previews for common native
   code
 - Code cross-references that link call and branch sources to resolved function
-  candidates, code ranges, and offsets when visible
+  candidates, PE imported functions through IAT slots, code ranges, and offsets
+  when visible
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
