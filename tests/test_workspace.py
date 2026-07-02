@@ -22,6 +22,10 @@ def test_build_case_index_summarizes_cases(tmp_path):
     assert {case["file_name"] for case in index["cases"]} == {"one.bin", "two.bin"}
     assert all(case["sha256"] for case in index["cases"])
     assert all(case["indicator_count"] >= 2 for case in index["cases"])
+    assert all("resource_count" in case for case in index["cases"])
+    assert all("debug_entry_count" in case for case in index["cases"])
+    assert all("tls_callback_count" in case for case in index["cases"])
+    assert all("certificate_count" in case for case in index["cases"])
     assert all("symbol_count" in case for case in index["cases"])
     assert all("relocation_count" in case for case in index["cases"])
     assert all("code_range_count" in case for case in index["cases"])
@@ -46,8 +50,11 @@ def test_diff_cases_reports_added_and_removed_values(tmp_path):
     assert "url:http://left.example.com" in diff["indicators"]["removed"]
     assert "symbols" in diff
     assert "relocations" in diff
+    assert "resources" in diff
+    assert "debug_info" in diff
     assert "functions" in diff
     assert "code_edges" in diff
+    assert "certificates" in diff
     assert diff["rule_matches"]["common_count"] >= 1
 
 

@@ -25,6 +25,8 @@ def write_case_artifacts(
         _write_strings_csv(target / "strings.csv", report),
         _write_chunks_csv(target / "chunks.csv", report),
         _write_sections_csv(target / "sections.csv", report),
+        _write_resources_csv(target / "resources.csv", report),
+        _write_debug_csv(target / "debug.csv", report),
         _write_imports_csv(target / "imports.csv", report),
         _write_exports_csv(target / "exports.csv", report),
         _write_symbols_csv(target / "symbols.csv", report),
@@ -132,6 +134,73 @@ def _write_sections_csv(path: Path, report: dict) -> Path:
                     section.get("readable", ""),
                     section.get("writable", ""),
                     section.get("executable", ""),
+                ]
+            )
+    return path
+
+
+def _write_resources_csv(path: Path, report: dict) -> Path:
+    resources = (
+        report.get("extraction", {})
+        .get("format", {})
+        .get("details", {})
+        .get("resources", [])
+    )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            ["type", "type_id", "name", "language", "offset", "size", "sha256", "preview"]
+        )
+        for item in resources:
+            writer.writerow(
+                [
+                    item.get("type", ""),
+                    item.get("type_id", ""),
+                    item.get("name", ""),
+                    item.get("language", ""),
+                    item.get("offset", ""),
+                    item.get("size", ""),
+                    item.get("sha256", ""),
+                    item.get("preview", ""),
+                ]
+            )
+    return path
+
+
+def _write_debug_csv(path: Path, report: dict) -> Path:
+    details = report.get("extraction", {}).get("format", {}).get("details", {})
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["source", "type", "offset", "size", "detail"])
+        for item in details.get("debug", []):
+            codeview = item.get("codeview", {})
+            writer.writerow(
+                [
+                    "debug",
+                    item.get("type", ""),
+                    item.get("offset", ""),
+                    item.get("size", ""),
+                    codeview.get("pdb_path", codeview.get("format", "")),
+                ]
+            )
+        for item in details.get("tls", {}).get("callbacks", []):
+            writer.writerow(
+                [
+                    "tls_callback",
+                    "",
+                    item.get("rva", ""),
+                    "",
+                    f"0x{item.get('address', 0):x}",
+                ]
+            )
+        for item in details.get("certificates", []):
+            writer.writerow(
+                [
+                    "certificate",
+                    item.get("type", ""),
+                    item.get("offset", ""),
+                    item.get("size", ""),
+                    item.get("sha256", ""),
                 ]
             )
     return path

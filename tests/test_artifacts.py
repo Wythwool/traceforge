@@ -47,6 +47,35 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                             "executable": True,
                         }
                     ],
+                    "resources": [
+                        {
+                            "type": "manifest",
+                            "type_id": 24,
+                            "name": "1",
+                            "language": "1033",
+                            "offset": 912,
+                            "size": 32,
+                            "sha256": "abc123",
+                            "preview": "<assembly/>",
+                        }
+                    ],
+                    "debug": [
+                        {
+                            "type": "codeview",
+                            "offset": 1024,
+                            "size": 48,
+                            "codeview": {"pdb_path": "sample.pdb"},
+                        }
+                    ],
+                    "tls": {"callbacks": [{"address": 4096, "rva": 4096}]},
+                    "certificates": [
+                        {
+                            "type": "pkcs_signed_data",
+                            "offset": 2048,
+                            "size": 64,
+                            "sha256": "def456",
+                        }
+                    ],
                     "imports": [
                         {
                             "library": "KERNEL32.dll",
@@ -137,6 +166,8 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "strings.csv",
         "chunks.csv",
         "sections.csv",
+        "resources.csv",
+        "debug.csv",
         "imports.csv",
         "exports.csv",
         "symbols.csv",
@@ -147,6 +178,9 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "CreateFileW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "sample.dll" in (tmp_path / "case" / "exports.csv").read_text()
     assert "Run" in (tmp_path / "case" / "symbols.csv").read_text()
+    assert "manifest" in (tmp_path / "case" / "resources.csv").read_text()
+    assert "sample.pdb" in (tmp_path / "case" / "debug.csv").read_text()
+    assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()

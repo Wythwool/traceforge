@@ -85,6 +85,10 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "rule_match_count": extraction.get("rules", {}).get("match_count", 0),
         "string_count": ascii_total + utf16_total,
         "section_count": len(details.get("sections", [])),
+        "resource_count": len(details.get("resources", [])),
+        "debug_entry_count": len(details.get("debug", [])),
+        "tls_callback_count": len(details.get("tls", {}).get("callbacks", [])),
+        "certificate_count": len(details.get("certificates", [])),
         "import_count": _count_imports(details),
         "export_count": len(details.get("exports", [])),
         "symbol_count": len(extraction.get("symbols", {}).get("symbols", [])),
@@ -114,6 +118,12 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     imports = _diff_values(_import_values(left_extraction), _import_values(right_extraction))
     exports = _diff_values(_export_values(left_extraction), _export_values(right_extraction))
     sections = _diff_values(_section_values(left_extraction), _section_values(right_extraction))
+    resources = _diff_values(
+        _resource_values(left_extraction), _resource_values(right_extraction)
+    )
+    debug_info = _diff_values(
+        _debug_values(left_extraction), _debug_values(right_extraction)
+    )
     symbols = _diff_values(_symbol_values(left_extraction), _symbol_values(right_extraction))
     relocations = _diff_values(
         _relocation_values(left_extraction), _relocation_values(right_extraction)
@@ -121,6 +131,9 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     functions = _diff_values(_function_values(left_extraction), _function_values(right_extraction))
     code_edges = _diff_values(
         _code_edge_values(left_extraction), _code_edge_values(right_extraction)
+    )
+    certificates = _diff_values(
+        _certificate_values(left_extraction), _certificate_values(right_extraction)
     )
     embedded = _diff_values(
         _embedded_values(left_extraction), _embedded_values(right_extraction)
@@ -139,10 +152,13 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "imports": imports,
         "exports": exports,
         "sections": sections,
+        "resources": resources,
+        "debug_info": debug_info,
         "symbols": symbols,
         "relocations": relocations,
         "functions": functions,
         "code_edges": code_edges,
+        "certificates": certificates,
         "embedded_artifacts": embedded,
         "strings": _string_delta(left_extraction, right_extraction),
     }
@@ -208,6 +224,14 @@ def render_diff_markdown(diff: dict) -> str:
             "",
             _render_value_counts(diff["sections"]),
             "",
+            "## Resources",
+            "",
+            _render_value_counts(diff["resources"]),
+            "",
+            "## Debug Info",
+            "",
+            _render_value_counts(diff["debug_info"]),
+            "",
             "## Symbols",
             "",
             _render_value_counts(diff["symbols"]),
@@ -223,6 +247,10 @@ def render_diff_markdown(diff: dict) -> str:
             "## Code Edges",
             "",
             _render_value_counts(diff["code_edges"]),
+            "",
+            "## Certificates",
+            "",
+            _render_value_counts(diff["certificates"]),
             "",
         ]
     )
@@ -320,6 +348,33 @@ def _section_values(extraction: dict) -> set[str]:
     return values
 
 
+def _resource_values(extraction: dict) -> set[str]:
+    values = set()
+    details = extraction.get("format", {}).get("details", {})
+    for item in details.get("resources", []):
+        values.add(
+            f"{item.get('type', '')}:{item.get('name', '')}:"
+            f"{item.get('language', '')}:{item.get('sha256', '')}".lower()
+        )
+    return values
+
+
+def _debug_values(extraction: dict) -> set[str]:
+    values = set()
+    details = extraction.get("format", {}).get("details", {})
+    for item in details.get("debug", []):
+        codeview = item.get("codeview", {})
+        values.add(
+            f"{item.get('type', '')}:{codeview.get('pdb_path', '')}:"
+            f"{codeview.get('guid', '')}:{codeview.get('age', '')}".lower()
+        )
+    for item in details.get("tls", {}).get("callbacks", []):
+        address = item.get("address")
+        if isinstance(address, int):
+            values.add(f"tls_callback:{address:x}")
+    return values
+
+
 def _symbol_values(extraction: dict) -> set[str]:
     values = set()
     for source in ("imports", "exports", "symbols"):
@@ -357,6 +412,14 @@ def _code_edge_values(extraction: dict) -> set[str]:
         target = item.get("target")
         if isinstance(source, int) and isinstance(target, int):
             values.add(f"{item.get('kind', '')}:{source:x}->{target:x}".lower())
+    return values
+
+
+def _certificate_values(extraction: dict) -> set[str]:
+    values = set()
+    details = extraction.get("format", {}).get("details", {})
+    for item in details.get("certificates", []):
+        values.add(f"{item.get('type', '')}:{item.get('sha256', '')}".lower())
     return values
 
 
@@ -402,10 +465,13 @@ def _diff_summary(diff: dict) -> list[str]:
         ("imports", "import"),
         ("exports", "export"),
         ("sections", "section"),
+        ("resources", "resource"),
+        ("debug_info", "debug item"),
         ("symbols", "symbol"),
         ("relocations", "relocation"),
         ("functions", "function"),
         ("code_edges", "code edge"),
+        ("certificates", "certificate"),
         ("embedded_artifacts", "embedded artifact"),
     ):
         item = diff[key]

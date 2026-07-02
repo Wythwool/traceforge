@@ -1,7 +1,8 @@
 """Graph construction for TraceForge cases.
 
-Node types: sample, format, section, import, export, symbol, code_range,
-function, chunk, string, indicator, rule_match, embedded_artifact, finding.
+Node types: sample, format, section, import, export, symbol, resource,
+debug_info, tls_callback, certificate, code_range, function, chunk, string,
+indicator, rule_match, embedded_artifact, finding.
 Edge types: contains, references, has_indicator, has_finding, has_format,
 has_rule, imports, exports, defines, calls, branches, embeds.
 """
@@ -15,6 +16,8 @@ MAX_GRAPH_SYMBOLS = 256
 MAX_GRAPH_FUNCTIONS = 256
 MAX_GRAPH_CODE_RANGES = 128
 MAX_GRAPH_SECTIONS = 256
+MAX_GRAPH_RESOURCES = 256
+MAX_GRAPH_DEBUG = 64
 LABEL_MAX = 80
 
 NODE_TYPES = (
@@ -24,6 +27,10 @@ NODE_TYPES = (
     "import",
     "export",
     "symbol",
+    "resource",
+    "debug_info",
+    "tls_callback",
+    "certificate",
     "code_range",
     "function",
     "chunk",
@@ -268,6 +275,67 @@ def _add_format_nodes(
             }
         )
         edges.append({"source": sample_id, "target": node_id, "type": "embeds"})
+
+    for index, item in enumerate(details.get("resources", [])[:MAX_GRAPH_RESOURCES]):
+        node_id = f"resource:{index}"
+        label = f"{item.get('type', 'resource')} {item.get('name', '')}".strip()
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "resource",
+                "label": _short(label),
+                "resource_type": item.get("type", ""),
+                "name": item.get("name", ""),
+                "language": item.get("language", ""),
+                "offset": item.get("offset"),
+                "size": item.get("size", 0),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    for index, item in enumerate(details.get("debug", [])[:MAX_GRAPH_DEBUG]):
+        codeview = item.get("codeview", {})
+        node_id = f"debug:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "debug_info",
+                "label": _short(codeview.get("pdb_path", item.get("type", "debug"))),
+                "debug_type": item.get("type", ""),
+                "pdb_path": codeview.get("pdb_path", ""),
+                "offset": item.get("offset"),
+                "size": item.get("size", 0),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    for index, item in enumerate(details.get("tls", {}).get("callbacks", [])[:MAX_GRAPH_DEBUG]):
+        node_id = f"tls_callback:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "tls_callback",
+                "label": f"TLS callback 0x{item.get('address', 0):x}",
+                "address": item.get("address"),
+                "rva": item.get("rva"),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    for index, item in enumerate(details.get("certificates", [])[:MAX_GRAPH_DEBUG]):
+        node_id = f"certificate:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "certificate",
+                "label": _short(item.get("type", "certificate")),
+                "certificate_type": item.get("type", ""),
+                "offset": item.get("offset"),
+                "size": item.get("size", 0),
+                "sha256": item.get("sha256", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
 
 
 def _add_code_nodes(

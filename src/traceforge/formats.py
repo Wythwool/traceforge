@@ -18,6 +18,11 @@ MAX_EXPORTS = 512
 MAX_SECTIONS = 512
 MAX_CONTAINER_ENTRIES = 512
 MAX_EMBEDDED_ARTIFACTS = 128
+MAX_PE_RESOURCES = 512
+MAX_PE_DEBUG_ENTRIES = 64
+MAX_PE_TLS_CALLBACKS = 64
+MAX_PE_CERTIFICATES = 32
+MAX_PE_RESOURCE_STRINGS = 64
 
 PE_MACHINES = {
     0x014C: "i386",
@@ -43,6 +48,42 @@ PE_DIRECTORIES = (
     "debug", "architecture", "global_ptr", "tls", "load_config", "bound_import",
     "iat", "delay_import", "clr_runtime", "reserved",
 )
+
+PE_RESOURCE_TYPES = {
+    1: "cursor",
+    2: "bitmap",
+    3: "icon",
+    4: "menu",
+    5: "dialog",
+    6: "string",
+    9: "accelerator",
+    10: "rcdata",
+    12: "group_cursor",
+    14: "group_icon",
+    16: "version",
+    24: "manifest",
+}
+
+PE_DEBUG_TYPES = {
+    0: "unknown",
+    1: "coff",
+    2: "codeview",
+    4: "fpo",
+    9: "borland",
+    10: "reserved10",
+    11: "clsid",
+    12: "vc_feature",
+    13: "pogo",
+    14: "iltcg",
+    16: "repro",
+}
+
+PE_CERTIFICATE_TYPES = {
+    1: "x509",
+    2: "pkcs_signed_data",
+    3: "reserved",
+    4: "ts_stack_signed",
+}
 
 PE_CHARACTERISTIC_FLAGS = {
     0x0001: "relocs_stripped",
@@ -289,7 +330,13 @@ def parse_pe(data: bytes) -> dict:
     entry_section = _section_for_rva(sections, entry_rva)
     imports = _parse_pe_imports(data, sections, directories.get("import"), is_pe64)
     exports = _parse_pe_exports(data, sections, directories.get("export"))
-    observations = _pe_observations(sections, entry_section, imports, directories)
+    resources = _parse_pe_resources(data, sections, directories.get("resource"))
+    debug = _parse_pe_debug(data, sections, directories.get("debug"))
+    tls = _parse_pe_tls(data, sections, directories.get("tls"), is_pe64, image_base)
+    certificates = _parse_pe_certificates(data, directories.get("certificate"))
+    observations = _pe_observations(
+        sections, entry_section, imports, directories, tls, certificates
+    )
     return {
         "format": "pe32+" if is_pe64 else "pe32",
         "machine": PE_MACHINES.get(machine, f"0x{machine:04x}"),
@@ -311,6 +358,10 @@ def parse_pe(data: bytes) -> dict:
         "sections": sections,
         "imports": imports,
         "exports": exports,
+        "resources": resources,
+        "debug": debug,
+        "tls": tls,
+        "certificates": certificates,
         "overlay": _pe_overlay(data, sections),
         "observations": observations,
     }
@@ -573,7 +624,320 @@ def _parse_pe_exports(data: bytes, sections: list[dict], directory: dict | None)
     return exports
 
 
-def _pe_observations(sections: list[dict], entry_section: dict | None, imports: list[dict], directories: dict) -> list[dict]:
+def _parse_pe_resources(
+    data: bytes, sections: list[dict], directory: dict | None
+) -> list[dict]:
+    if not directory or not directory.get("rva"):
+        return []
+    base_offset = _rva_to_offset(sections, directory["rva"])
+    if base_offset is None:
+        return []
+    limit = min(base_offset + max(directory.get("size", 0), 0), len(data))
+    if limit <= base_offset:
+        limit = len(data)
+
+    resources: list[dict] = []
+    visited: set[int] = set()
+
+    def visit(relative_offset: int, path: list[dict], depth: int) -> None:
+        if len(resources) >= MAX_PE_RESOURCES or depth > 4:
+            return
+        directory_offset = base_offset + relative_offset
+        if (
+            directory_offset in visited
+            or directory_offset < base_offset
+            or directory_offset + 16 > limit
+        ):
+            return
+        visited.add(directory_offset)
+
+        named_count = _u16(data, directory_offset + 12, "<")
+        id_count = _u16(data, directory_offset + 14, "<")
+        entry_count = min(named_count + id_count, MAX_PE_RESOURCES - len(resources))
+        for index in range(entry_count):
+            entry_offset = directory_offset + 16 + index * 8
+            if entry_offset + 8 > limit:
+                break
+            name_raw = _u32(data, entry_offset, "<")
+            child_raw = _u32(data, entry_offset + 4, "<")
+            item_path = path + [_resource_name(data, base_offset, limit, name_raw, depth)]
+            child_offset = child_raw & 0x7FFFFFFF
+            if child_raw & 0x80000000:
+                visit(child_offset, item_path, depth + 1)
+                continue
+
+            data_entry = base_offset + child_offset
+            if data_entry + 16 > limit:
+                continue
+            data_rva = _u32(data, data_entry, "<")
+            size = _u32(data, data_entry + 4, "<")
+            codepage = _u32(data, data_entry + 8, "<")
+            raw_offset = _rva_to_offset(sections, data_rva)
+            blob = _slice(data, raw_offset or 0, size) if raw_offset is not None else b""
+            resources.append(
+                _resource_record(item_path, data_rva, raw_offset, size, codepage, blob)
+            )
+            if len(resources) >= MAX_PE_RESOURCES:
+                break
+
+    visit(0, [], 0)
+    return resources
+
+
+def _resource_name(
+    data: bytes, base_offset: int, limit: int, raw_name: int, depth: int
+) -> dict:
+    if raw_name & 0x80000000:
+        name_offset = base_offset + (raw_name & 0x7FFFFFFF)
+        if name_offset + 2 <= limit:
+            length = _u16(data, name_offset, "<")
+            end = min(name_offset + 2 + length * 2, limit)
+            value = data[name_offset + 2 : end].decode("utf-16-le", errors="replace")
+            return {"name": value}
+        return {"name": ""}
+    value = raw_name & 0xFFFF
+    item = {"id": value}
+    if depth == 0:
+        item["type_name"] = PE_RESOURCE_TYPES.get(value, f"resource_{value}")
+    return item
+
+
+def _resource_record(
+    path: list[dict],
+    rva: int,
+    offset: int | None,
+    size: int,
+    codepage: int,
+    blob: bytes,
+) -> dict:
+    type_item = path[0] if path else {}
+    name_item = path[1] if len(path) > 1 else {}
+    language_item = path[2] if len(path) > 2 else {}
+    resource_type = (
+        type_item.get("name")
+        or type_item.get("type_name")
+        or _resource_value(type_item)
+    )
+    item = {
+        "type": resource_type,
+        "type_id": type_item.get("id"),
+        "name": _resource_value(name_item),
+        "language": _resource_value(language_item),
+        "rva": rva,
+        "offset": offset,
+        "size": size,
+        "codepage": codepage,
+        "sha256": _sha256(blob) if blob else "",
+    }
+    preview = _resource_preview(blob)
+    if preview:
+        item["preview"] = preview
+    strings = _resource_strings(blob)
+    if strings:
+        item["strings"] = strings
+    return item
+
+
+def _resource_value(item: dict) -> str:
+    if "name" in item:
+        return str(item["name"])
+    if "id" in item:
+        return str(item["id"])
+    return ""
+
+
+def _resource_preview(blob: bytes) -> str:
+    if not blob:
+        return ""
+    sample = blob[:2048]
+    zero_odd = sum(1 for index in range(1, len(sample), 2) if sample[index] == 0)
+    if len(sample) >= 4 and zero_odd >= max(2, len(sample) // 4):
+        text = sample.decode("utf-16-le", errors="ignore")
+    else:
+        text = sample.decode("utf-8", errors="ignore")
+    text = text.replace("\x00", "").strip()
+    text = re.sub(r"\s+", " ", text)
+    return text[:500]
+
+
+def _resource_strings(blob: bytes) -> list[str]:
+    strings = []
+    for match in re.finditer(rb"(?:[\x20-\x7e]\x00){4,}", blob):
+        value = match.group().decode("utf-16-le", errors="ignore").strip()
+        if value:
+            strings.append(value)
+        if len(strings) >= MAX_PE_RESOURCE_STRINGS:
+            break
+    return strings
+
+
+def _parse_pe_debug(
+    data: bytes, sections: list[dict], directory: dict | None
+) -> list[dict]:
+    if not directory or not directory.get("rva") or not directory.get("size"):
+        return []
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None:
+        return []
+    count = min(directory["size"] // 28, MAX_PE_DEBUG_ENTRIES)
+    entries = []
+    for index in range(count):
+        item = offset + index * 28
+        if item + 28 > len(data):
+            break
+        (
+            characteristics,
+            timestamp,
+            major,
+            minor,
+            debug_type,
+            size_of_data,
+            address_of_raw_data,
+            pointer_to_raw_data,
+        ) = struct.unpack_from("<IIHHIIII", data, item)
+        raw_offset = pointer_to_raw_data or _rva_to_offset(sections, address_of_raw_data)
+        entry = {
+            "index": index,
+            "type": PE_DEBUG_TYPES.get(debug_type, f"0x{debug_type:x}"),
+            "type_id": debug_type,
+            "timestamp": timestamp,
+            "version": f"{major}.{minor}",
+            "characteristics": f"0x{characteristics:x}",
+            "size": size_of_data,
+            "rva": address_of_raw_data,
+            "offset": raw_offset,
+        }
+        if raw_offset is not None:
+            codeview = _parse_pe_codeview(data, raw_offset, size_of_data)
+            if codeview:
+                entry["codeview"] = codeview
+        entries.append(entry)
+    return entries
+
+
+def _parse_pe_codeview(data: bytes, offset: int, size: int) -> dict:
+    raw = _slice(data, offset, size)
+    if raw.startswith(b"RSDS") and len(raw) >= 24:
+        guid = _format_codeview_guid(raw[4:20])
+        age = _u32(raw, 20, "<")
+        path = _read_c_string(raw, 24, max(len(raw) - 24, 0))
+        return {"format": "rsds", "guid": guid, "age": age, "pdb_path": path}
+    if raw.startswith(b"NB10") and len(raw) >= 16:
+        offset_value, timestamp, age = struct.unpack_from("<III", raw, 4)
+        path = _read_c_string(raw, 16, max(len(raw) - 16, 0))
+        return {
+            "format": "nb10",
+            "offset": offset_value,
+            "timestamp": timestamp,
+            "age": age,
+            "pdb_path": path,
+        }
+    return {}
+
+
+def _format_codeview_guid(raw: bytes) -> str:
+    if len(raw) != 16:
+        return raw.hex()
+    part1, part2, part3 = struct.unpack_from("<IHH", raw, 0)
+    tail = raw[8:]
+    return (
+        f"{part1:08x}-{part2:04x}-{part3:04x}-"
+        f"{tail[:2].hex()}-{tail[2:].hex()}"
+    )
+
+
+def _parse_pe_tls(
+    data: bytes,
+    sections: list[dict],
+    directory: dict | None,
+    is_pe64: bool,
+    image_base: int,
+) -> dict:
+    empty = {"callbacks": []}
+    if not directory or not directory.get("rva"):
+        return empty
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None:
+        return empty
+    entry_size = 8 if is_pe64 else 4
+    directory_size = 40 if is_pe64 else 24
+    if offset + directory_size > len(data):
+        return empty
+    if is_pe64:
+        start_raw, end_raw, address_index, address_callbacks = struct.unpack_from(
+            "<QQQQ", data, offset
+        )
+    else:
+        start_raw, end_raw, address_index, address_callbacks = struct.unpack_from(
+            "<IIII", data, offset
+        )
+    callbacks = []
+    callback_offset = _va_to_offset(sections, address_callbacks, image_base)
+    if callback_offset is not None:
+        for index in range(MAX_PE_TLS_CALLBACKS):
+            item_offset = callback_offset + index * entry_size
+            if item_offset + entry_size > len(data):
+                break
+            value = _u64(data, item_offset, "<") if is_pe64 else _u32(data, item_offset, "<")
+            if value == 0:
+                break
+            callbacks.append(
+                {
+                    "index": index,
+                    "address": value,
+                    "rva": value - image_base if value >= image_base else value,
+                }
+            )
+    return {
+        "raw_data_start": start_raw,
+        "raw_data_end": end_raw,
+        "index_address": address_index,
+        "callback_table_address": address_callbacks,
+        "callbacks": callbacks,
+    }
+
+
+def _parse_pe_certificates(data: bytes, directory: dict | None) -> list[dict]:
+    if not directory or not directory.get("rva") or not directory.get("size"):
+        return []
+    cursor = directory["rva"]
+    end = min(cursor + directory["size"], len(data))
+    certificates = []
+    for index in range(MAX_PE_CERTIFICATES):
+        if cursor + 8 > end:
+            break
+        length, revision, cert_type = struct.unpack_from("<IHH", data, cursor)
+        if length < 8 or cursor + length > end:
+            break
+        payload = data[cursor + 8 : cursor + length]
+        certificates.append(
+            {
+                "index": index,
+                "offset": cursor,
+                "size": length,
+                "revision": f"0x{revision:04x}",
+                "type": PE_CERTIFICATE_TYPES.get(cert_type, f"0x{cert_type:x}"),
+                "sha256": _sha256(payload) if payload else "",
+            }
+        )
+        cursor += (length + 7) & ~7
+    return certificates
+
+
+def _va_to_offset(sections: list[dict], va: int, image_base: int) -> int | None:
+    if va >= image_base:
+        return _rva_to_offset(sections, va - image_base)
+    return _rva_to_offset(sections, va)
+
+
+def _pe_observations(
+    sections: list[dict],
+    entry_section: dict | None,
+    imports: list[dict],
+    directories: dict,
+    tls: dict,
+    certificates: list[dict],
+) -> list[dict]:
     observations = []
     for section in sections:
         if section["executable"] and section["writable"]:
@@ -606,6 +970,22 @@ def _pe_observations(sections: list[dict], entry_section: dict | None, imports: 
                 "id": "pe_import_directory_unparsed",
                 "detail": "import directory exists but no import names were resolved",
                 "evidence": "import",
+            }
+        )
+    if tls.get("callbacks"):
+        observations.append(
+            {
+                "id": "pe_tls_callbacks",
+                "detail": "TLS callbacks are present",
+                "evidence": str(len(tls["callbacks"])),
+            }
+        )
+    if directories.get("certificate") and not certificates:
+        observations.append(
+            {
+                "id": "pe_certificate_directory_unparsed",
+                "detail": "certificate table exists but no certificate records were parsed",
+                "evidence": "certificate",
             }
         )
     return observations

@@ -323,6 +323,9 @@ def _format_html(format_info: dict) -> str:
         parts.append("<h3>Exports</h3>")
         parts.append(_table(("name",), [(item,) for item in exports[:128]]))
 
+    parts.append(_pe_resources_html(details.get("resources", [])))
+    parts.append(_pe_debug_html(details))
+
     entries = details.get("entries", [])
     if entries:
         parts.append("<h3>Container entries</h3>")
@@ -351,6 +354,65 @@ def _format_html(format_info: dict) -> str:
             )
         )
     return "\n".join(parts)
+
+
+def _pe_resources_html(resources: list[dict]) -> str:
+    if not resources:
+        return ""
+    rows = [
+        (
+            item.get("type", ""),
+            item.get("name", ""),
+            item.get("language", ""),
+            item.get("offset", ""),
+            item.get("size", ""),
+            item.get("preview", ""),
+        )
+        for item in resources[:128]
+    ]
+    return "<h3>Resources</h3>\n" + _table(
+        ("type", "name", "language", "offset", "size", "preview"), rows
+    )
+
+
+def _pe_debug_html(details: dict) -> str:
+    rows = []
+    for item in details.get("debug", []):
+        codeview = item.get("codeview", {})
+        rows.append(
+            (
+                "debug",
+                item.get("type", ""),
+                item.get("offset", ""),
+                item.get("size", ""),
+                codeview.get("pdb_path", codeview.get("format", "")),
+            )
+        )
+    for item in details.get("tls", {}).get("callbacks", []):
+        rows.append(
+            (
+                "tls callback",
+                "",
+                _hex_or_empty(item.get("rva")),
+                "",
+                _hex_or_empty(item.get("address")),
+            )
+        )
+    for item in details.get("certificates", []):
+        rows.append(
+            (
+                "certificate",
+                item.get("type", ""),
+                item.get("offset", ""),
+                item.get("size", ""),
+                item.get("sha256", ""),
+            )
+        )
+    if not rows:
+        return ""
+    return "<h3>Debug, TLS and certificates</h3>\n" + _table(
+        ("source", "type", "offset", "size", "detail"), rows
+    )
 
 
 def _symbols_html(symbol_info: dict) -> str:
