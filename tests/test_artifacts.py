@@ -65,6 +65,22 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                     ],
                 }
             },
+            "symbols": {
+                "imports": [{"name": "CreateFileW", "kind": "function"}],
+                "exports": [{"name": "Run", "kind": "function"}],
+                "symbols": [
+                    {
+                        "name": "Run",
+                        "kind": "function",
+                        "binding": "global",
+                        "section_index": 1,
+                        "value": 4096,
+                        "size": 12,
+                    }
+                ],
+                "relocations": [],
+                "needed_libraries": [],
+            },
             "rules": {
                 "matches": [
                     {
@@ -98,11 +114,13 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "sections.csv",
         "imports.csv",
         "exports.csv",
+        "symbols.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
     assert "CreateFileW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "sample.dll" in (tmp_path / "case" / "exports.csv").read_text()
+    assert "Run" in (tmp_path / "case" / "symbols.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()
