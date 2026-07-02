@@ -23,6 +23,7 @@ from traceforge.reports import (
 )
 from traceforge.rules import evaluate_rules, load_rules
 from traceforge.score import score_extraction
+from traceforge.symbols import inspect_symbols
 
 CHUNK_SIZE = 4096
 WINDOW_SIZE = 256
@@ -179,6 +180,7 @@ def extract(data: bytes, filename: str = "") -> dict:
         "chunks": chunk_summary(data),
     }
     result["format"] = analyze_format(data, filename)
+    result["symbols"] = inspect_symbols(data, filename, result["format"])
     result["rules"] = evaluate_rules(result)
     return result
 
