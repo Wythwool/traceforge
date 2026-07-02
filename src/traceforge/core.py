@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from traceforge import __version__
+from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.reports import (
     write_all_reports,
@@ -19,6 +20,7 @@ from traceforge.reports import (
     write_report_html,
     write_summary_md,
 )
+from traceforge.rules import evaluate_rules, load_rules
 from traceforge.score import score_extraction
 
 CHUNK_SIZE = 4096
@@ -149,11 +151,11 @@ def extract_indicators(ascii_values: list[str], utf16_values: list[str]) -> list
     ]
 
 
-def extract(data: bytes) -> dict:
+def extract(data: bytes, filename: str = "") -> dict:
     """Extract all facts from a byte string."""
     ascii_values = extract_ascii_strings(data)
     utf16_values = extract_utf16le_strings(data)
-    return {
+    result = {
         "size": len(data),
         "hashes": hash_digests(data),
         "first_bytes_hex": data[:FIRST_BYTES_LENGTH].hex(),
@@ -175,6 +177,9 @@ def extract(data: bytes) -> dict:
         },
         "chunks": chunk_summary(data),
     }
+    result["format"] = analyze_format(data, filename)
+    result["rules"] = evaluate_rules(result)
+    return result
 
 
 def case_id_for(path: Path, extraction: dict) -> str:
@@ -208,7 +213,7 @@ def scan_file(path: Path, cases_root: Path | None = None) -> Path:
     """Scan one file and write a complete case folder. Returns the case dir."""
     path = Path(path)
     data = path.read_bytes()
-    extraction = extract(data)
+    extraction = extract(data, path.name)
     manifest = build_manifest(path, extraction)
     report = {
         "manifest": manifest,
@@ -253,3 +258,16 @@ def regenerate_exports(case_dir: Path) -> list[Path]:
     case_dir = Path(case_dir)
     report = load_report(case_dir)
     return write_indicator_exports(case_dir, report)
+
+
+def identify_file(path: Path) -> dict:
+    """Return format metadata for one file without creating a case folder."""
+    path = Path(path)
+    return analyze_format(path.read_bytes(), path.name)
+
+
+def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:
+    """Evaluate built-in or external local rules for one file."""
+    path = Path(path)
+    extraction = extract(path.read_bytes(), path.name)
+    return evaluate_rules(extraction, load_rules(rules_path))
