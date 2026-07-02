@@ -27,7 +27,7 @@ traceforge scan-dir DIR          # scan regular files directly inside DIR
 traceforge scan-dir DIR -r       # scan regular files recursively
 traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json
 traceforge export CASE_DIR       # rebuild indicators.csv and indicators.json
-traceforge artifacts CASE_DIR    # rebuild strings/chunks/sections/imports/exports/symbols CSVs
+traceforge artifacts CASE_DIR    # rebuild strings/chunks/sections/imports/exports/symbols/code CSVs
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
@@ -37,6 +37,8 @@ traceforge search FILE --hex "4d 5a ?? 90"
 traceforge search FILE --regex "https?://"
 traceforge symbols FILE --json
 traceforge symbols FILE --csv symbols.csv
+traceforge code FILE --json
+traceforge code FILE --csv code.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
@@ -59,6 +61,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Search results with file offsets, match context, and section names when known
 - Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, and PE
   base relocation blocks
+- Static executable code ranges, entry point mapping, function candidates,
+  call/branch edges, and bounded instruction previews for common native code
 - Built-in and JSON-defined local rule matches
 
 ## Case Output
@@ -71,20 +75,23 @@ Each scan writes:
 - `summary.md` - short analyst summary
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
-  exports, strings, indicators, rule matches, findings, and embedded artifacts
+  exports, code ranges, functions, strings, indicators, rule matches, findings,
+  and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `imports.csv`, `exports.csv`,
-  `symbols.csv`, and `findings.csv` - table exports for day-to-day case work
+  `symbols.csv`, `code.csv`, and `findings.csv` - table exports for day-to-day
+  case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
 `traceforge index` writes `case_index.json` with one compact row per case:
 source file, hash, size, format, score, indicator count, rule match count,
-string count, import/export counts, symbol and relocation counts, and embedded
-artifact count.
+string count, import/export counts, symbol and relocation counts, code range
+and function counts, and embedded artifact count.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
-exports, sections, symbols, relocations, embedded artifacts, and string totals.
+exports, sections, symbols, relocations, function candidates, code edges,
+embedded artifacts, and string totals.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
 
