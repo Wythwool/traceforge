@@ -9,7 +9,7 @@ from pathlib import Path
 from traceforge import __version__, core
 from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
-from traceforge.code_map import inspect_code_file, write_code_csv
+from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv
 from traceforge.search import search_file
 from traceforge.symbols import dumps as dump_symbols
 from traceforge.symbols import inspect_symbols_file, write_symbols_csv
@@ -129,8 +129,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     code = sub.add_parser("code", help="map executable ranges and instruction previews")
     code.add_argument("file", type=Path, help="path to a regular file")
+    code.add_argument(
+        "--decoder",
+        choices=("auto", "builtin", "capstone"),
+        default="auto",
+        help="instruction decoder preference; auto uses Capstone when installed",
+    )
     code.add_argument("--json", action="store_true", help="print full JSON output")
     code.add_argument("--csv", type=Path, help="write instruction preview CSV")
+    code.add_argument("--blocks-csv", type=Path, help="write basic block CSV")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -327,10 +334,13 @@ def _cmd_code(args: argparse.Namespace) -> int:
     if not args.file.is_file():
         return _fail(f"not a regular file: {args.file}")
     try:
-        payload = inspect_code_file(args.file)
+        payload = inspect_code_file(args.file, decoder=args.decoder)
         if args.csv is not None:
             write_code_csv(args.csv, payload)
             print(f"wrote {args.csv}")
+        if args.blocks_csv is not None:
+            write_blocks_csv(args.blocks_csv, payload)
+            print(f"wrote {args.blocks_csv}")
     except OSError as exc:
         return _fail(f"could not inspect code for {args.file}: {exc}")
     if args.json:
@@ -338,8 +348,10 @@ def _cmd_code(args: argparse.Namespace) -> int:
         return 0
     print(
         f"architecture {payload.get('architecture', 'unknown')} "
+        f"decoder={payload.get('decoder', {}).get('engine', '')} "
         f"ranges={len(payload.get('ranges', []))} "
         f"functions={len(payload.get('functions', []))} "
+        f"blocks={len(payload.get('basic_blocks', []))} "
         f"instructions={len(payload.get('instructions', []))}"
     )
     for item in payload.get("functions", [])[:32]:

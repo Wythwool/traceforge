@@ -19,6 +19,12 @@ Requires Python 3.12+. For tests and linting:
 python -m pip install ".[test,lint]"
 ```
 
+For Capstone-backed disassembly:
+
+```bash
+python -m pip install ".[disasm]"
+```
+
 ## Commands
 
 ```bash
@@ -39,6 +45,7 @@ traceforge symbols FILE --json
 traceforge symbols FILE --csv symbols.csv
 traceforge code FILE --json
 traceforge code FILE --csv code.csv
+traceforge code FILE --decoder capstone --blocks-csv blocks.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
@@ -62,8 +69,11 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Search results with file offsets, match context, and section names when known
 - Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, and PE
   base relocation blocks
-- Static executable code ranges, entry point mapping, function candidates,
-  call/branch edges, and bounded instruction previews for common native code
+- Static executable code ranges, entry point mapping, function candidates, basic
+  blocks, call/branch edges, and bounded instruction previews for common native
+  code
+- Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
+  built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
 
 ## Case Output
@@ -76,24 +86,25 @@ Each scan writes:
 - `summary.md` - short analyst summary
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
-  exports, PE resources/debug metadata, code ranges, functions, strings,
-  indicators, rule matches, findings, and embedded artifacts
+  exports, PE resources/debug metadata, code ranges, functions, basic blocks,
+  strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
-  `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, and `findings.csv`
-  - table exports for day-to-day case work
+  `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`, and
+  `findings.csv` - table exports for day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
 `traceforge index` writes `case_index.json` with one compact row per case:
 source file, hash, size, format, score, indicator count, rule match count,
 string count, PE resource/debug/TLS/certificate counts, import/export counts,
-symbol and relocation counts, code range and function counts, and embedded
-artifact count.
+symbol and relocation counts, code range, function, basic-block and edge counts,
+and embedded artifact count.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
-candidates, code edges, certificates, embedded artifacts, and string totals.
+candidates, basic blocks, code edges, certificates, embedded artifacts, and
+string totals.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
 

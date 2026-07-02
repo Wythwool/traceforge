@@ -122,6 +122,18 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                     }
                 ],
                 "functions": [{"name": "entry", "address": 4096, "offset": 512}],
+                "basic_blocks": [
+                    {
+                        "range": ".text",
+                        "index": 0,
+                        "address": 4096,
+                        "offset": 512,
+                        "size": 1,
+                        "instruction_count": 1,
+                        "terminator": "ret",
+                        "outgoing": [],
+                    }
+                ],
                 "instructions": [
                     {
                         "range": ".text",
@@ -172,6 +184,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "exports.csv",
         "symbols.csv",
         "code.csv",
+        "blocks.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
@@ -182,6 +195,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "sample.pdb" in (tmp_path / "case" / "debug.csv").read_text()
     assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
+    assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()

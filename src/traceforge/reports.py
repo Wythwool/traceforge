@@ -447,13 +447,16 @@ def _code_html(code_info: dict) -> str:
         return ""
     parts = ["<h2>Code Map</h2>"]
     entry = code_info.get("entry_point", {})
+    decoder = code_info.get("decoder", {})
     parts.append(
         _table(
             ("field", "value"),
             [
                 ("architecture", code_info.get("architecture", "unknown")),
+                ("decoder", decoder.get("engine", "")),
                 ("ranges", len(code_info.get("ranges", []))),
                 ("functions", len(code_info.get("functions", []))),
+                ("basic blocks", len(code_info.get("basic_blocks", []))),
                 ("instructions", len(code_info.get("instructions", []))),
                 ("edges", len(code_info.get("edges", []))),
                 ("entry address", _hex_or_empty(entry.get("address"))),
@@ -494,6 +497,25 @@ def _code_html(code_info: dict) -> str:
                         item.get("source", ""),
                     )
                     for item in functions[:128]
+                ],
+            )
+        )
+    blocks = code_info.get("basic_blocks", [])
+    if blocks:
+        parts.append("<h3>Basic blocks</h3>")
+        parts.append(
+            _table(
+                ("address", "offset", "size", "instructions", "terminator", "outgoing"),
+                [
+                    (
+                        _hex_or_empty(item.get("address")),
+                        _hex_or_empty(item.get("offset")),
+                        item.get("size", ""),
+                        item.get("instruction_count", ""),
+                        item.get("terminator", ""),
+                        ", ".join(_hex_or_empty(value) for value in item.get("outgoing", [])),
+                    )
+                    for item in blocks[:128]
                 ],
             )
         )

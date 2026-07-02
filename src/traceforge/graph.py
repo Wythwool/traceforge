@@ -1,8 +1,8 @@
 """Graph construction for TraceForge cases.
 
 Node types: sample, format, section, import, export, symbol, resource,
-debug_info, tls_callback, certificate, code_range, function, chunk, string,
-indicator, rule_match, embedded_artifact, finding.
+debug_info, tls_callback, certificate, code_range, function, basic_block,
+chunk, string, indicator, rule_match, embedded_artifact, finding.
 Edge types: contains, references, has_indicator, has_finding, has_format,
 has_rule, imports, exports, defines, calls, branches, embeds.
 """
@@ -14,6 +14,7 @@ MAX_GRAPH_IMPORTS = 256
 MAX_GRAPH_EXPORTS = 256
 MAX_GRAPH_SYMBOLS = 256
 MAX_GRAPH_FUNCTIONS = 256
+MAX_GRAPH_BASIC_BLOCKS = 512
 MAX_GRAPH_CODE_RANGES = 128
 MAX_GRAPH_SECTIONS = 256
 MAX_GRAPH_RESOURCES = 256
@@ -33,6 +34,7 @@ NODE_TYPES = (
     "certificate",
     "code_range",
     "function",
+    "basic_block",
     "chunk",
     "string",
     "indicator",
@@ -382,6 +384,42 @@ def _add_code_nodes(
             }
         )
         edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    block_nodes = {}
+    for index, item in enumerate(code.get("basic_blocks", [])[:MAX_GRAPH_BASIC_BLOCKS]):
+        address = item.get("address")
+        if not isinstance(address, int):
+            continue
+        node_id = f"basic_block:{index}"
+        block_nodes[address] = node_id
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "basic_block",
+                "label": f"block 0x{address:x}",
+                "address": address,
+                "offset": item.get("offset"),
+                "size": item.get("size", 0),
+                "instruction_count": item.get("instruction_count", 0),
+                "terminator": item.get("terminator", ""),
+                "range": item.get("range", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    for source_address, source_id in block_nodes.items():
+        block = next(
+            (
+                item
+                for item in code.get("basic_blocks", [])
+                if item.get("address") == source_address
+            ),
+            {},
+        )
+        for target in block.get("outgoing", []):
+            target_id = block_nodes.get(target)
+            if target_id:
+                edges.append({"source": source_id, "target": target_id, "type": "branches"})
 
     function_starts = sorted(function_nodes)
     for item in code.get("edges", []):
