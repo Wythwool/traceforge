@@ -3,7 +3,7 @@
 import json
 import struct
 
-from traceforge import cli
+from traceforge import cli, core
 from traceforge.symbols import inspect_symbols, write_symbols_csv
 
 
@@ -116,3 +116,17 @@ def test_symbols_command_json_and_csv(tmp_path, monkeypatch, capsys):
     payload = json.loads(out.split("\n", 1)[1])
     assert payload["needed_libraries"] == ["libc.so.6"]
     assert csv_path.is_file()
+
+
+def test_scan_embeds_symbols_in_case_outputs(tmp_path):
+    sample = tmp_path / "sample.elf"
+    sample.write_bytes(build_elf_with_symbols())
+
+    case_dir = core.scan_file(sample, cases_root=tmp_path / "cases")
+    report = json.loads((case_dir / "report.json").read_text(encoding="utf-8"))
+    graph = json.loads((case_dir / "graph.json").read_text(encoding="utf-8"))
+
+    assert report["extraction"]["symbols"]["needed_libraries"] == ["libc.so.6"]
+    assert [item["name"] for item in report["extraction"]["symbols"]["imports"]] == ["puts"]
+    assert "exported_func" in (case_dir / "symbols.csv").read_text(encoding="utf-8")
+    assert "symbol" in {node["type"] for node in graph["nodes"]}
