@@ -12,6 +12,14 @@ CASE_FILES = {
     "indicators.csv",
     "indicators.json",
     "graph.json",
+    "artifacts.json",
+    "strings.csv",
+    "chunks.csv",
+    "sections.csv",
+    "imports.csv",
+    "exports.csv",
+    "findings.csv",
+    "hexdump.txt",
 }
 
 
@@ -85,6 +93,38 @@ def test_report_and_export_regenerate(tmp_path, monkeypatch):
         (case_dir / name).unlink()
     assert cli.main(["export", str(case_dir)]) == 0
     for name in ("indicators.csv", "indicators.json"):
+        assert (case_dir / name).is_file()
+
+
+def test_artifacts_regenerate(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sample = tmp_path / "sample.bin"
+    write_sample(sample)
+    assert cli.main(["scan", str(sample)]) == 0
+    case_dir = case_dirs(tmp_path)[0]
+
+    for name in (
+        "artifacts.json",
+        "strings.csv",
+        "chunks.csv",
+        "sections.csv",
+        "imports.csv",
+        "exports.csv",
+        "findings.csv",
+        "hexdump.txt",
+    ):
+        (case_dir / name).unlink()
+    assert cli.main(["artifacts", str(case_dir), "--source", str(sample)]) == 0
+    for name in (
+        "artifacts.json",
+        "strings.csv",
+        "chunks.csv",
+        "sections.csv",
+        "imports.csv",
+        "exports.csv",
+        "findings.csv",
+        "hexdump.txt",
+    ):
         assert (case_dir / name).is_file()
 
 
