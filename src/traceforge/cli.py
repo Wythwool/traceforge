@@ -117,6 +117,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional JSON rule file; built-in rules are used when omitted",
     )
 
+    ruleset = sub.add_parser("ruleset", help="validate, list, or export rule files")
+    ruleset_sub = ruleset.add_subparsers(dest="ruleset_command", required=True)
+    ruleset_validate = ruleset_sub.add_parser("validate", help="validate a rule file")
+    ruleset_validate.add_argument(
+        "rules_path",
+        nargs="?",
+        type=Path,
+        help="rule file to validate; built-in rules are checked when omitted",
+    )
+    ruleset_list = ruleset_sub.add_parser("list", help="list rules in a rule file")
+    ruleset_list.add_argument(
+        "rules_path",
+        nargs="?",
+        type=Path,
+        help="rule file to list; built-in rules are listed when omitted",
+    )
+    ruleset_export = ruleset_sub.add_parser("export", help="write a normalized rule file")
+    ruleset_export.add_argument(
+        "rules_path",
+        nargs="?",
+        type=Path,
+        help="source rule file; built-in rules are exported when omitted",
+    )
+    ruleset_export.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        type=Path,
+        help="destination JSON file",
+    )
+
     carve = sub.add_parser("carve", help="carve embedded artifacts from one file")
     carve.add_argument("file", type=Path, help="path to a regular file")
     carve.add_argument(
@@ -368,6 +399,37 @@ def _cmd_rules(path: Path, rules_path: Path | None) -> int:
     return 0
 
 
+def _cmd_ruleset(args: argparse.Namespace) -> int:
+    if args.rules_path is not None and not args.rules_path.is_file():
+        return _fail(f"rule file not found: {args.rules_path}")
+    try:
+        payload = core.validate_ruleset(args.rules_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return _fail(f"could not read rule set: {exc}")
+
+    if args.ruleset_command == "validate":
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["valid"] else 1
+
+    if args.ruleset_command == "list":
+        if not payload["valid"]:
+            print(json.dumps(payload, indent=2))
+            return 1
+        for rule in payload["rules"]:
+            print(f"{rule['id']}\t{rule['level']}\t{rule['name']}")
+        return 0
+
+    if not payload["valid"]:
+        print(json.dumps(payload, indent=2))
+        return 1
+    try:
+        path = core.export_ruleset(args.output, args.rules_path)
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not write rule set: {exc}")
+    print(f"wrote {path}")
+    return 0
+
+
 def _cmd_carve(path: Path, output: Path) -> int:
     if not path.is_file():
         return _fail(f"not a regular file: {path}")
@@ -562,6 +624,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_identify(args.file)
     if args.command == "rules":
         return _cmd_rules(args.file, args.rules_path)
+    if args.command == "ruleset":
+        return _cmd_ruleset(args)
     if args.command == "carve":
         return _cmd_carve(args.file, args.output)
     if args.command == "search":

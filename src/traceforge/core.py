@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from traceforge import __version__, workspace
+from traceforge import ruleset as ruleset_tools
 from traceforge.annotations import (
     ensure_annotations,
     update_annotations,
@@ -384,6 +385,21 @@ def write_case_hunt(
     """Run a rule hunt across stored cases and write report files."""
     root = cases_root if cases_root is not None else default_cases_root()
     return write_hunt(root, rules_path, output_dir)
+
+
+def validate_ruleset(path: Path | None = None) -> dict:
+    """Validate built-in rules or a JSON rule file."""
+    return ruleset_tools.validate_ruleset(path)
+
+
+def describe_ruleset(path: Path | None = None) -> dict:
+    """Return compact rule metadata and validation results."""
+    return ruleset_tools.describe_ruleset(path)
+
+
+def export_ruleset(output: Path, source: Path | None = None) -> Path:
+    """Export built-in rules or normalize a JSON rule file."""
+    return ruleset_tools.export_ruleset(output, source)
 
 
 def build_cases_index(cases_root: Path | None = None) -> dict:

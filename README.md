@@ -39,6 +39,9 @@ traceforge annotate CASE_DIR --status triage --tag packed --note "Needs import r
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
+traceforge ruleset validate rules.json
+traceforge ruleset list rules.json
+traceforge ruleset export -o built-in-rules.json
 traceforge carve FILE -o carved  # carve embedded artifacts into a folder
 traceforge search FILE --text api
 traceforge search FILE --hex "4d 5a ?? 90"
@@ -183,6 +186,12 @@ Supported condition keys: `format_kind`, `indicator_type`, `regex`,
 The same rule files can be used with `traceforge rules FILE --rules rules.json`
 for one file or `traceforge hunt CASES_ROOT --rules rules.json` for an existing
 case workspace.
+
+Use `traceforge ruleset validate rules.json` before running a large hunt. It
+checks rule IDs, levels, `any`/`all` groups, condition names, regular
+expressions, hex byte strings, suffixes, and condition value types. Use
+`traceforge ruleset export -o built-in-rules.json` to write the built-in rules
+to a file that can be edited and reused.
 
 ## Example
 
