@@ -39,6 +39,8 @@ traceforge annotate CASE_DIR --status triage --tag packed --note "Needs import r
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
+traceforge signatures FILE       # match built-in local signatures
+traceforge signatures FILE --signatures signatures.json --csv signatures.csv
 traceforge ruleset validate rules.json
 traceforge ruleset list rules.json
 traceforge ruleset export -o built-in-rules.json
@@ -99,6 +101,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
+- Built-in and JSON-defined local signature matches with text, UTF-16LE text,
+  hex wildcard, regex, and offset-constrained patterns
 
 ## Case Output
 
@@ -118,7 +122,8 @@ Each scan writes:
   code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `xrefs.csv`, and `findings.csv` - table exports for day-to-day case work
+  `xrefs.csv`, `signature_matches.csv`, and `findings.csv` - table exports for
+  day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -145,11 +150,17 @@ is being passed to another tool.
 case report in a cases root. It writes `hunt.json`, `hunt.csv`, and `hunt.md`
 with the matched cases, rule IDs, levels, and evidence.
 
+`traceforge signatures FILE` matches built-in or JSON-defined signatures against
+one local file without creating a case. Signature patterns can use literal text,
+UTF-16LE text, hex bytes with `??` wildcards, regular expressions over extracted
+string runs, exact offsets, and per-pattern match caps. Scans also write built-in
+signature results into `report.json` and `signature_matches.csv`.
+
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
-`extract_manifest.json`, `bundle_manifest.json`, and external rule sets. These
-schemas are intended for pipeline validation, typed clients, and long-lived case
-archives.
+`extract_manifest.json`, `bundle_manifest.json`, external rule sets, and
+external signature sets. These schemas are intended for pipeline validation,
+typed clients, and long-lived case archives.
 
 `traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
 for one stored case. The bundle contains a `bundle_manifest.json` with every

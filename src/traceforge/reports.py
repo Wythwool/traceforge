@@ -58,6 +58,7 @@ def render_report_html(report: dict) -> str:
     strings = extraction["strings"]
     format_info = extraction.get("format", {})
     rules = extraction.get("rules", {})
+    signatures = extraction.get("signatures", {})
     window = extraction["entropy"]["byte_window"]
     label = score["label"]
     title = f"TraceForge report: {manifest['file_name']}"
@@ -151,6 +152,25 @@ def render_report_html(report: dict) -> str:
     else:
         parts.append('<p class="note">No local rules matched.</p>')
 
+    parts.append(f"<h2>Signature matches ({signatures.get('match_count', 0)})</h2>")
+    if signatures.get("matches"):
+        parts.append(
+            _table(
+                ("id", "level", "name", "evidence"),
+                [
+                    (
+                        match["id"],
+                        match["level"],
+                        match["name"],
+                        "; ".join(match["evidence"]),
+                    )
+                    for match in signatures["matches"]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No local signatures matched.</p>')
+
     parts.append("<h2>Entropy</h2>")
     parts.append(
         _table(
@@ -214,6 +234,7 @@ def render_summary_md(report: dict) -> str:
     counts = Counter(item["type"] for item in extraction["indicators"])
     format_info = extraction.get("format", {})
     rules = extraction.get("rules", {})
+    signatures = extraction.get("signatures", {})
 
     lines = [
         f"# TraceForge summary: {manifest['file_name']}",
@@ -256,6 +277,15 @@ def render_summary_md(report: dict) -> str:
         lines.extend(
             f"- {match['id']} ({match['level']}): {match['name']}"
             for match in rules["matches"]
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Signature matches"])
+    if signatures.get("matches"):
+        lines.extend(
+            f"- {match['id']} ({match['level']}): {match['name']}"
+            for match in signatures["matches"]
         )
     else:
         lines.append("- none")

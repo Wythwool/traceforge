@@ -387,6 +387,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
                         "symbols": {"type": "object", "additionalProperties": True},
                         "code": {"type": "object", "additionalProperties": True},
                         "rules": {"$ref": "#/$defs/ruleResult"},
+                        "signatures": {"$ref": "#/$defs/signatureResult"},
                     },
                     "additionalProperties": True,
                 },
@@ -465,6 +466,21 @@ SCHEMAS: dict[str, dict[str, Any]] = {
                     },
                     "additionalProperties": True,
                 },
+                "signatureResult": {
+                    "type": "object",
+                    "required": ["engine", "signature_count", "match_count", "matches"],
+                    "properties": {
+                        "engine": {"const": "traceforge-signatures"},
+                        "signature_count": {"$ref": "#/$defs/count"},
+                        "match_count": {"$ref": "#/$defs/count"},
+                        "truncated": {"type": "boolean"},
+                        "matches": {
+                            "type": "array",
+                            "items": {"type": "object", "additionalProperties": True},
+                        },
+                    },
+                    "additionalProperties": True,
+                },
                 "score": {
                     "type": "object",
                     "required": ["score", "max_score", "label", "reasons"],
@@ -478,6 +494,71 @@ SCHEMAS: dict[str, dict[str, Any]] = {
                 },
             },
             "additionalProperties": True,
+        },
+    ),
+    "signature-set": _document(
+        "signature-set",
+        "TraceForge signature set",
+        "External JSON signature set accepted by traceforge signatures.",
+        {
+            "type": "object",
+            "required": ["signatures"],
+            "properties": {
+                "signatures": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/signature"},
+                }
+            },
+            "$defs": {
+                **copy.deepcopy(_COMMON_DEFS),
+                "signature": {
+                    "type": "object",
+                    "required": ["id", "patterns"],
+                    "properties": {
+                        "id": {"type": "string", "minLength": 1},
+                        "name": {"type": "string"},
+                        "level": {
+                            "enum": ["info", "low", "medium", "high", "critical"],
+                            "default": "info",
+                        },
+                        "description": {"type": "string"},
+                        "condition": {"enum": ["any", "all"], "default": "any"},
+                        "min_patterns": {"type": "integer", "minimum": 1},
+                        "patterns": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {"$ref": "#/$defs/signaturePattern"},
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                "signaturePattern": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "text": {"type": "string", "minLength": 1},
+                        "hex": {"type": "string", "minLength": 1},
+                        "regex": {"type": "string", "minLength": 1},
+                        "ascii": {"type": "boolean"},
+                        "wide": {"type": "boolean"},
+                        "nocase": {"type": "boolean"},
+                        "offset": {"type": "integer", "minimum": 0},
+                        "offsets": {
+                            "type": "array",
+                            "items": {"type": "integer", "minimum": 0},
+                        },
+                        "max_matches": {"type": "integer", "minimum": 1},
+                    },
+                    "oneOf": [
+                        {"required": ["text"]},
+                        {"required": ["hex"]},
+                        {"required": ["regex"]},
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "additionalProperties": False,
         },
     ),
     "ruleset": _document(

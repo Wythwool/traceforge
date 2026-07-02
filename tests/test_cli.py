@@ -27,6 +27,7 @@ CASE_FILES = {
     "code.csv",
     "blocks.csv",
     "xrefs.csv",
+    "signature_matches.csv",
     "findings.csv",
     "hexdump.txt",
 }

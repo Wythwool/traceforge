@@ -11,6 +11,7 @@ EXPECTED_SCHEMAS = {
     "hunt",
     "report",
     "ruleset",
+    "signature-set",
 }
 
 

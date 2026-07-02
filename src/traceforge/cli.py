@@ -12,6 +12,8 @@ from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
 from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv, write_xrefs_csv
 from traceforge.search import search_file
+from traceforge.signatures import dumps as dump_signatures
+from traceforge.signatures import write_signature_csv
 from traceforge.symbols import dumps as dump_symbols
 from traceforge.symbols import inspect_symbols_file, write_symbols_csv
 
@@ -116,6 +118,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="optional JSON rule file; built-in rules are used when omitted",
     )
+
+    signatures = sub.add_parser("signatures", help="match local signatures for one file")
+    signatures.add_argument("file", type=Path, help="path to a regular file")
+    signatures.add_argument(
+        "--signatures",
+        dest="signatures_path",
+        type=Path,
+        help="optional JSON signature file; built-in signatures are used when omitted",
+    )
+    signatures.add_argument("--json", action="store_true", help="print full JSON output")
+    signatures.add_argument("--csv", type=Path, help="write flat signature CSV")
 
     ruleset = sub.add_parser("ruleset", help="validate, list, or export rule files")
     ruleset_sub = ruleset.add_subparsers(dest="ruleset_command", required=True)
@@ -491,6 +504,36 @@ def _cmd_rules(path: Path, rules_path: Path | None) -> int:
     return 0
 
 
+def _cmd_signatures(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    if args.signatures_path is not None and not args.signatures_path.is_file():
+        return _fail(f"signature file not found: {args.signatures_path}")
+    try:
+        payload = core.evaluate_file_signatures(args.file, args.signatures_path)
+        if args.csv is not None:
+            write_signature_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except (OSError, ValueError, json.JSONDecodeError, re.error) as exc:
+        return _fail(f"could not match signatures for {args.file}: {exc}")
+    if args.json:
+        print(dump_signatures(payload), end="")
+        return 0
+    if not payload["matches"]:
+        print("no signature matches")
+        return 0
+    for match in payload["matches"]:
+        print(
+            f"{match['id']} {match['level']} "
+            f"patterns={match['matched_pattern_count']}/{match['pattern_count']}"
+        )
+        for evidence in match.get("evidence", [])[:3]:
+            print(f"  {evidence}")
+    if payload["truncated"]:
+        print("signature output truncated")
+    return 0
+
+
 def _cmd_ruleset(args: argparse.Namespace) -> int:
     if args.rules_path is not None and not args.rules_path.is_file():
         return _fail(f"rule file not found: {args.rules_path}")
@@ -845,6 +888,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_identify(args.file)
     if args.command == "rules":
         return _cmd_rules(args.file, args.rules_path)
+    if args.command == "signatures":
+        return _cmd_signatures(args)
     if args.command == "ruleset":
         return _cmd_ruleset(args)
     if args.command == "schema":

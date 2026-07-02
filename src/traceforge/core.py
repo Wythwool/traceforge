@@ -34,6 +34,8 @@ from traceforge.reports import (
 )
 from traceforge.rules import evaluate_rules, load_rules
 from traceforge.score import score_extraction
+from traceforge.signatures import match_file_signatures
+from traceforge.signatures import match_signatures as match_signature_set
 from traceforge.symbols import inspect_symbols
 from traceforge.viewer import write_case_viewer
 from traceforge.workspace_viewer import write_workspace_viewer
@@ -196,6 +198,11 @@ def extract(data: bytes, filename: str = "") -> dict:
     result["symbols"] = inspect_symbols(data, filename, result["format"])
     result["code"] = inspect_code(data, filename, result["format"], result["symbols"])
     result["rules"] = evaluate_rules(result)
+    result["signatures"] = match_signature_set(
+        data,
+        filename=filename,
+        format_info=result["format"],
+    )
     return result
 
 
@@ -513,6 +520,11 @@ def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:
     path = Path(path)
     extraction = extract(path.read_bytes(), path.name)
     return evaluate_rules(extraction, load_rules(rules_path))
+
+
+def evaluate_file_signatures(path: Path, signatures_path: Path | None = None) -> dict:
+    """Match built-in or external local signatures for one file."""
+    return match_file_signatures(path, signatures_path)
 
 
 def extract_file_payloads_to_dir(

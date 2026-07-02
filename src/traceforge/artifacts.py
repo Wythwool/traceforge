@@ -33,6 +33,7 @@ def write_case_artifacts(
         write_code_csv(target / "code.csv", report.get("extraction", {}).get("code", {})),
         write_blocks_csv(target / "blocks.csv", report.get("extraction", {}).get("code", {})),
         write_xrefs_csv(target / "xrefs.csv", report.get("extraction", {}).get("code", {})),
+        _write_signature_matches_csv(target / "signature_matches.csv", report),
         _write_findings_csv(target / "findings.csv", report),
     ]
 
@@ -272,6 +273,17 @@ def _write_findings_csv(path: Path, report: dict) -> Path:
                     "; ".join(match.get("evidence", [])),
                 ]
             )
+        for match in report.get("extraction", {}).get("signatures", {}).get("matches", []):
+            writer.writerow(
+                [
+                    "signature",
+                    match.get("id", ""),
+                    match.get("level", ""),
+                    match.get("name", ""),
+                    match.get("description", ""),
+                    "; ".join(match.get("evidence", [])),
+                ]
+            )
         for item in _observations(report):
             writer.writerow(
                 [
@@ -283,6 +295,41 @@ def _write_findings_csv(path: Path, report: dict) -> Path:
                     str(item.get("evidence", "")),
                 ]
             )
+    return path
+
+
+def _write_signature_matches_csv(path: Path, report: dict) -> Path:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "signature_id",
+                "level",
+                "name",
+                "pattern_id",
+                "type",
+                "offset",
+                "offset_hex",
+                "section",
+                "value",
+            ]
+        )
+        for signature in report.get("extraction", {}).get("signatures", {}).get("matches", []):
+            for pattern in signature.get("patterns", []):
+                for match in pattern.get("matches", []):
+                    writer.writerow(
+                        [
+                            signature.get("id", ""),
+                            signature.get("level", ""),
+                            signature.get("name", ""),
+                            pattern.get("id", ""),
+                            match.get("type", ""),
+                            match.get("offset", ""),
+                            match.get("offset_hex", ""),
+                            match.get("section", ""),
+                            match.get("value", ""),
+                        ]
+                    )
     return path
 
 
