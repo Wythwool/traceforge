@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "traceforge"
-version = "0.1.0"
-description = "Read local files as bytes, extract facts, and write case reports."
+version = "0.2.0"
+description = "Offline file inspection workbench with format parsers, local rules, graphs, and reports."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
@@ -17,6 +17,7 @@ classifiers = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+lint = ["ruff>=0.8"]
 
 [project.scripts]
 traceforge = "traceforge.cli:main"
