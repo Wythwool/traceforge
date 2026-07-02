@@ -35,6 +35,8 @@ traceforge carve FILE -o carved  # carve embedded artifacts into a folder
 traceforge search FILE --text api
 traceforge search FILE --hex "4d 5a ?? 90"
 traceforge search FILE --regex "https?://"
+traceforge symbols FILE --json
+traceforge symbols FILE --csv symbols.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
@@ -55,6 +57,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - WASM sections, imports, and exports
 - Embedded artifact signatures inside larger byte streams
 - Search results with file offsets, match context, and section names when known
+- Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, and PE
+  base relocation blocks
 - Built-in and JSON-defined local rule matches
 
 ## Case Output
