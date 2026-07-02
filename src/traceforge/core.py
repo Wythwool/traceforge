@@ -25,6 +25,7 @@ from traceforge.code_map import inspect_code
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.hunt import write_hunt
+from traceforge.payloads import extract_payloads as extract_file_payloads
 from traceforge.reports import (
     write_all_reports,
     write_indicator_exports,
@@ -428,6 +429,24 @@ def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:
     path = Path(path)
     extraction = extract(path.read_bytes(), path.name)
     return evaluate_rules(extraction, load_rules(rules_path))
+
+
+def extract_file_payloads_to_dir(
+    path: Path,
+    output_dir: Path,
+    *,
+    sections: bool = True,
+    resources: bool = True,
+    overlay: bool = True,
+) -> dict:
+    """Extract selected sections, resources, and overlay bytes to a directory."""
+    return extract_file_payloads(
+        path,
+        output_dir,
+        sections=sections,
+        resources=resources,
+        overlay=overlay,
+    )
 
 
 def _load_workspace_hunt(cases_root: Path, hunt_path: Path | None) -> dict | None:

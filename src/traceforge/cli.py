@@ -158,6 +158,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="output directory for carved files",
     )
 
+    extract_cmd = sub.add_parser(
+        "extract", help="extract sections, PE resources, and overlay bytes"
+    )
+    extract_cmd.add_argument("file", type=Path, help="path to a regular file")
+    extract_cmd.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("extracted"),
+        help="output directory for extracted payloads",
+    )
+    extract_cmd.add_argument("--sections", action="store_true", help="extract sections only")
+    extract_cmd.add_argument("--resources", action="store_true", help="extract PE resources only")
+    extract_cmd.add_argument("--overlay", action="store_true", help="extract overlay only")
+    extract_cmd.add_argument("--json", action="store_true", help="print full JSON output")
+
     search_cmd = sub.add_parser("search", help="search bytes, strings, and regex in one file")
     search_cmd.add_argument("file", type=Path, help="path to a regular file")
     search_cmd.add_argument("--text", help="literal text to search as UTF-8 and UTF-16LE")
@@ -441,6 +457,29 @@ def _cmd_carve(path: Path, output: Path) -> int:
     return 0
 
 
+def _cmd_extract(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    selected = args.sections or args.resources or args.overlay
+    try:
+        payload = core.extract_file_payloads_to_dir(
+            args.file,
+            args.output,
+            sections=args.sections if selected else True,
+            resources=args.resources if selected else True,
+            overlay=args.overlay if selected else True,
+        )
+    except OSError as exc:
+        return _fail(f"could not extract payloads from {args.file}: {exc}")
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"wrote {payload['count']} payload(s) to {args.output}")
+    print(f"wrote {args.output / 'extract_manifest.json'}")
+    print(f"wrote {args.output / 'extracted_payloads.csv'}")
+    return 0
+
+
 def _cmd_search(args: argparse.Namespace) -> int:
     if not args.file.is_file():
         return _fail(f"not a regular file: {args.file}")
@@ -628,6 +667,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ruleset(args)
     if args.command == "carve":
         return _cmd_carve(args.file, args.output)
+    if args.command == "extract":
+        return _cmd_extract(args)
     if args.command == "search":
         return _cmd_search(args)
     if args.command == "symbols":

@@ -43,6 +43,8 @@ traceforge ruleset validate rules.json
 traceforge ruleset list rules.json
 traceforge ruleset export -o built-in-rules.json
 traceforge carve FILE -o carved  # carve embedded artifacts into a folder
+traceforge extract FILE -o extracted
+traceforge extract FILE --resources --overlay -o extracted --json
 traceforge search FILE --text api
 traceforge search FILE --hex "4d 5a ?? 90"
 traceforge search FILE --regex "https?://"
@@ -134,6 +136,12 @@ compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
 candidates, basic blocks, code xrefs, code edges, certificates, embedded
 artifacts, and string totals.
+
+`traceforge extract FILE -o extracted` writes parsed byte ranges into an output
+folder. By default it extracts sections or segments, PE resources, and PE
+overlay data when those ranges are present. Use `--sections`, `--resources`, or
+`--overlay` to limit the output. The folder includes `extract_manifest.json` and
+`extracted_payloads.csv` with offsets, sizes, hashes, and file names.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
 
