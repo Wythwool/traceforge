@@ -1,10 +1,12 @@
 """Command-line interface for TraceForge."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from traceforge import __version__, core
+from traceforge.carve import carve_file
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +36,28 @@ def build_parser() -> argparse.ArgumentParser:
         "export", help="regenerate indicators.csv and indicators.json for a case"
     )
     export.add_argument("case_dir", type=Path, help="path to an existing case folder")
+
+    identify = sub.add_parser("identify", help="print format metadata for one file")
+    identify.add_argument("file", type=Path, help="path to a regular file")
+
+    rules = sub.add_parser("rules", help="evaluate local rules for one file")
+    rules.add_argument("file", type=Path, help="path to a regular file")
+    rules.add_argument(
+        "--rules",
+        dest="rules_path",
+        type=Path,
+        help="optional JSON rule file; built-in rules are used when omitted",
+    )
+
+    carve = sub.add_parser("carve", help="carve embedded artifacts from one file")
+    carve.add_argument("file", type=Path, help="path to a regular file")
+    carve.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("carved"),
+        help="output directory for carved files",
+    )
     return parser
 
 
@@ -89,6 +113,41 @@ def _cmd_export(case_dir: Path) -> int:
     return 0
 
 
+def _cmd_identify(path: Path) -> int:
+    if not path.is_file():
+        return _fail(f"not a regular file: {path}")
+    try:
+        payload = core.identify_file(path)
+    except OSError as exc:
+        return _fail(f"could not identify {path}: {exc}")
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _cmd_rules(path: Path, rules_path: Path | None) -> int:
+    if not path.is_file():
+        return _fail(f"not a regular file: {path}")
+    if rules_path is not None and not rules_path.is_file():
+        return _fail(f"rule file not found: {rules_path}")
+    try:
+        payload = core.evaluate_file_rules(path, rules_path)
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not evaluate rules for {path}: {exc}")
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _cmd_carve(path: Path, output: Path) -> int:
+    if not path.is_file():
+        return _fail(f"not a regular file: {path}")
+    try:
+        payload = carve_file(path, output)
+    except OSError as exc:
+        return _fail(f"could not carve {path}: {exc}")
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "scan":
@@ -97,4 +156,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_scan_dir(args.directory)
     if args.command == "report":
         return _cmd_report(args.case_dir)
-    return _cmd_export(args.case_dir)
+    if args.command == "export":
+        return _cmd_export(args.case_dir)
+    if args.command == "identify":
+        return _cmd_identify(args.file)
+    if args.command == "rules":
+        return _cmd_rules(args.file, args.rules_path)
+    return _cmd_carve(args.file, args.output)
