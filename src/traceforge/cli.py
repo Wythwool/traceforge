@@ -75,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum source bytes to render into hexdump.txt",
     )
 
+    viewer = sub.add_parser("view", help="regenerate viewer.html for a case")
+    viewer.add_argument("case_dir", type=Path, help="path to an existing case folder")
+
     identify = sub.add_parser("identify", help="print format metadata for one file")
     identify.add_argument("file", type=Path, help="path to a regular file")
 
@@ -232,6 +235,17 @@ def _cmd_artifacts(
         return _fail(f"could not write artifacts for {case_dir}: {exc}")
     for path in paths:
         print(f"wrote {path}")
+    return 0
+
+
+def _cmd_view(case_dir: Path) -> int:
+    if not (case_dir / "report.json").is_file():
+        return _fail(f"no report.json in {case_dir}; run 'traceforge scan' first")
+    try:
+        path = core.regenerate_viewer(case_dir)
+    except OSError as exc:
+        return _fail(f"could not write viewer for {case_dir}: {exc}")
+    print(f"wrote {path}")
     return 0
 
 
@@ -409,6 +423,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_export(args.case_dir)
     if args.command == "artifacts":
         return _cmd_artifacts(args.case_dir, args.source, args.hexdump_limit)
+    if args.command == "view":
+        return _cmd_view(args.case_dir)
     if args.command == "identify":
         return _cmd_identify(args.file)
     if args.command == "rules":

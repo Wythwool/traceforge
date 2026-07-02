@@ -25,6 +25,7 @@ from traceforge.reports import (
 from traceforge.rules import evaluate_rules, load_rules
 from traceforge.score import score_extraction
 from traceforge.symbols import inspect_symbols
+from traceforge.viewer import write_case_viewer
 
 CHUNK_SIZE = 4096
 WINDOW_SIZE = 256
@@ -232,7 +233,9 @@ def scan_file(path: Path, cases_root: Path | None = None) -> Path:
 
     _write_json(case_dir / "manifest.json", manifest)
     write_all_reports(case_dir, report)
-    _write_json(case_dir / "graph.json", build_graph(report))
+    graph = build_graph(report)
+    _write_json(case_dir / "graph.json", graph)
+    write_case_viewer(case_dir, report, graph)
     write_case_artifacts(case_dir, report, source_path=path)
     return case_dir
 
@@ -269,10 +272,12 @@ def regenerate_reports(case_dir: Path) -> list[Path]:
     """Rebuild report.html, summary.md and graph.json from stored report.json."""
     case_dir = Path(case_dir)
     report = load_report(case_dir)
+    graph = build_graph(report)
     return [
         write_report_html(case_dir, report),
         write_summary_md(case_dir, report),
-        _write_json(case_dir / "graph.json", build_graph(report)),
+        _write_json(case_dir / "graph.json", graph),
+        write_case_viewer(case_dir, report, graph),
     ]
 
 
@@ -292,6 +297,19 @@ def regenerate_artifacts(
     case_dir = Path(case_dir)
     report = load_report(case_dir)
     return write_case_artifacts(case_dir, report, source_path, hexdump_limit)
+
+
+def regenerate_viewer(case_dir: Path) -> Path:
+    """Rebuild viewer.html from report.json and graph.json data."""
+    case_dir = Path(case_dir)
+    report = load_report(case_dir)
+    graph_path = case_dir / "graph.json"
+    graph = (
+        json.loads(graph_path.read_text(encoding="utf-8"))
+        if graph_path.is_file()
+        else build_graph(report)
+    )
+    return write_case_viewer(case_dir, report, graph)
 
 
 def write_case_index(cases_root: Path | None = None) -> Path:

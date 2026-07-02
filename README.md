@@ -31,9 +31,10 @@ python -m pip install ".[disasm]"
 traceforge scan FILE             # create a case under .traceforge/cases
 traceforge scan-dir DIR          # scan regular files directly inside DIR
 traceforge scan-dir DIR -r       # scan regular files recursively
-traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json
+traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json, viewer.html
 traceforge export CASE_DIR       # rebuild indicators.csv and indicators.json
 traceforge artifacts CASE_DIR    # rebuild workbench CSVs and hexdump files
+traceforge view CASE_DIR         # rebuild the self-contained case viewer
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
@@ -88,6 +89,8 @@ Each scan writes:
 - `manifest.json` - case metadata and source file hash
 - `report.json` - full structured extraction and score
 - `report.html` - self-contained readable report
+- `viewer.html` - self-contained case viewer with searchable graph nodes,
+  related edges, code xrefs, functions, and indicators
 - `summary.md` - short analyst summary
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,

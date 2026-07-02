@@ -8,6 +8,7 @@ CASE_FILES = {
     "manifest.json",
     "report.json",
     "report.html",
+    "viewer.html",
     "summary.md",
     "indicators.csv",
     "indicators.json",
@@ -89,10 +90,10 @@ def test_report_and_export_regenerate(tmp_path, monkeypatch):
     assert cli.main(["scan", str(sample)]) == 0
     case_dir = case_dirs(tmp_path)[0]
 
-    for name in ("report.html", "summary.md", "graph.json"):
+    for name in ("report.html", "viewer.html", "summary.md", "graph.json"):
         (case_dir / name).unlink()
     assert cli.main(["report", str(case_dir)]) == 0
-    for name in ("report.html", "summary.md", "graph.json"):
+    for name in ("report.html", "viewer.html", "summary.md", "graph.json"):
         assert (case_dir / name).is_file()
 
     for name in ("indicators.csv", "indicators.json"):
@@ -144,6 +145,21 @@ def test_artifacts_regenerate(tmp_path, monkeypatch):
         "hexdump.txt",
     ):
         assert (case_dir / name).is_file()
+
+
+def test_view_command_regenerates_viewer(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sample = tmp_path / "sample.bin"
+    write_sample(sample)
+    assert cli.main(["scan", str(sample)]) == 0
+    case_dir = case_dirs(tmp_path)[0]
+    (case_dir / "viewer.html").unlink()
+
+    assert cli.main(["view", str(case_dir)]) == 0
+
+    text = (case_dir / "viewer.html").read_text(encoding="utf-8")
+    assert "viewer-data" in text
+    assert "TraceForge viewer" in text
 
 
 def test_index_and_diff_commands(tmp_path, monkeypatch):
