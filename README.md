@@ -231,3 +231,6 @@ py -3.12 -m pytest
 python -m ruff check .
 python -m pytest
 ```
+
+The GitHub Actions workflow runs linting, tests, CLI smoke checks, and package
+builds on every push and pull request.

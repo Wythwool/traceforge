@@ -8,12 +8,25 @@ version = "0.21.0"
 description = "Offline file inspection workbench with format parsers, local rules, graphs, and reports."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Mono GlaShyiz", email = "varffdg@gmail.com" }]
+keywords = [
+    "binary-analysis",
+    "file-inspection",
+    "malware-analysis",
+    "reverse-engineering",
+]
 dependencies = []
 classifiers = [
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
     "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Wythwool/traceforge"
+Issues = "https://github.com/Wythwool/traceforge/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
