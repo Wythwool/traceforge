@@ -48,6 +48,18 @@ def test_scan_dir_scans_each_regular_file(tmp_path, monkeypatch):
     assert len(case_dirs(tmp_path)) == 2
 
 
+def test_scan_dir_recursive_scans_nested_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "input"
+    nested = target / "nested" / "deeper"
+    nested.mkdir(parents=True)
+    write_sample(target / "one.bin")
+    (nested / "two.bin").write_bytes(b"recursive marker http://nested.example.com\n")
+
+    assert cli.main(["scan-dir", str(target), "--recursive"]) == 0
+    assert len(case_dirs(tmp_path)) == 2
+
+
 def test_scan_dir_with_no_files(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "empty"
@@ -74,6 +86,27 @@ def test_report_and_export_regenerate(tmp_path, monkeypatch):
     assert cli.main(["export", str(case_dir)]) == 0
     for name in ("indicators.csv", "indicators.json"):
         assert (case_dir / name).is_file()
+
+
+def test_index_and_diff_commands(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    left = tmp_path / "left.bin"
+    right = tmp_path / "right.bin"
+    left.write_bytes(b"left marker http://left.example.com\n")
+    right.write_bytes(b"right marker http://right.example.com\n")
+
+    assert cli.main(["scan", str(left)]) == 0
+    assert cli.main(["scan", str(right)]) == 0
+    cases_root = tmp_path / ".traceforge" / "cases"
+
+    assert cli.main(["index", str(cases_root)]) == 0
+    assert (cases_root / "case_index.json").is_file()
+
+    cases = case_dirs(tmp_path)
+    output = tmp_path / "comparison"
+    assert cli.main(["diff", str(cases[0]), str(cases[1]), "-o", str(output)]) == 0
+    assert (output / "diff.json").is_file()
+    assert (output / "diff.md").is_file()
 
 
 def test_scan_missing_file_fails(tmp_path, monkeypatch, capsys):

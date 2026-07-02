@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from traceforge import __version__
+from traceforge import __version__, workspace
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.reports import (
@@ -231,8 +231,25 @@ def scan_file(path: Path, cases_root: Path | None = None) -> Path:
     return case_dir
 
 
-def iter_regular_files(directory: Path) -> list[Path]:
-    return sorted(entry for entry in Path(directory).iterdir() if entry.is_file())
+def iter_regular_files(directory: Path, recursive: bool = False) -> list[Path]:
+    root = Path(directory)
+    if recursive:
+        return sorted(
+            entry
+            for entry in root.rglob("*")
+            if entry.is_file() and ".traceforge" not in entry.relative_to(root).parts
+        )
+    return sorted(entry for entry in root.iterdir() if entry.is_file())
+
+
+def scan_directory(
+    directory: Path, recursive: bool = False, cases_root: Path | None = None
+) -> list[Path]:
+    """Scan regular files in a directory and return created case folders."""
+    return [
+        scan_file(path, cases_root=cases_root)
+        for path in iter_regular_files(directory, recursive=recursive)
+    ]
 
 
 def load_report(case_dir: Path) -> dict:
@@ -258,6 +275,26 @@ def regenerate_exports(case_dir: Path) -> list[Path]:
     case_dir = Path(case_dir)
     report = load_report(case_dir)
     return write_indicator_exports(case_dir, report)
+
+
+def write_case_index(cases_root: Path | None = None) -> Path:
+    root = cases_root if cases_root is not None else default_cases_root()
+    return workspace.write_case_index(root)
+
+
+def build_cases_index(cases_root: Path | None = None) -> dict:
+    root = cases_root if cases_root is not None else default_cases_root()
+    return workspace.build_case_index(root)
+
+
+def compare_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
+    return workspace.diff_cases(left_case_dir, right_case_dir)
+
+
+def write_case_comparison(
+    left_case_dir: Path, right_case_dir: Path, output_dir: Path | None = None
+) -> list[Path]:
+    return workspace.write_case_diff(left_case_dir, right_case_dir, output_dir)
 
 
 def identify_file(path: Path) -> dict:

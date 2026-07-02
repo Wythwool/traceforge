@@ -24,12 +24,15 @@ python -m pip install ".[test,lint]"
 ```bash
 traceforge scan FILE             # create a case under .traceforge/cases
 traceforge scan-dir DIR          # scan regular files directly inside DIR
+traceforge scan-dir DIR -r       # scan regular files recursively
 traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json
 traceforge export CASE_DIR       # rebuild indicators.csv and indicators.json
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
 traceforge carve FILE -o carved  # carve embedded artifacts into a folder
+traceforge index                 # write .traceforge/cases/case_index.json
+traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
 
 ## What It Extracts
@@ -60,6 +63,14 @@ Each scan writes:
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
   exports, strings, indicators, rule matches, findings, and embedded artifacts
+
+`traceforge index` writes `case_index.json` with one compact row per case:
+source file, hash, size, format, score, indicator count, rule match count,
+string count, import/export counts, and embedded artifact count.
+
+`traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
+compares hashes, size, format, score, indicators, rule matches, imports,
+exports, sections, embedded artifacts, and string totals.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
 

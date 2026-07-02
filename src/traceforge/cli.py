@@ -21,11 +21,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     scan = sub.add_parser("scan", help="scan one file and create a case folder")
     scan.add_argument("file", type=Path, help="path to a regular file")
+    scan.add_argument(
+        "--cases-root",
+        type=Path,
+        help="case storage root; defaults to .traceforge/cases",
+    )
 
     scan_dir = sub.add_parser(
-        "scan-dir", help="scan every regular file directly inside a directory"
+        "scan-dir", help="scan regular files inside a directory"
     )
     scan_dir.add_argument("directory", type=Path, help="path to a directory")
+    scan_dir.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="scan nested directories and skip .traceforge case output",
+    )
+    scan_dir.add_argument(
+        "--cases-root",
+        type=Path,
+        help="case storage root; defaults to .traceforge/cases",
+    )
 
     report = sub.add_parser(
         "report", help="regenerate report.html, summary.md and graph.json for a case"
@@ -58,6 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("carved"),
         help="output directory for carved files",
     )
+
+    index = sub.add_parser("index", help="write case_index.json for a cases root")
+    index.add_argument(
+        "cases_root",
+        nargs="?",
+        type=Path,
+        default=core.default_cases_root(),
+        help="case storage root; defaults to .traceforge/cases",
+    )
+
+    diff = sub.add_parser("diff", help="compare two case folders")
+    diff.add_argument("left_case_dir", type=Path, help="first case folder")
+    diff.add_argument("right_case_dir", type=Path, help="second case folder")
+    diff.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="output directory for diff.json and diff.md",
+    )
     return parser
 
 
@@ -66,28 +101,30 @@ def _fail(message: str) -> int:
     return 2
 
 
-def _cmd_scan(path: Path) -> int:
+def _cmd_scan(path: Path, cases_root: Path | None) -> int:
     if not path.is_file():
         return _fail(f"not a regular file: {path}")
     try:
-        case_dir = core.scan_file(path)
+        case_dir = core.scan_file(path, cases_root=cases_root)
     except OSError as exc:
         return _fail(f"could not scan {path}: {exc}")
     print(f"case created: {case_dir}")
     return 0
 
 
-def _cmd_scan_dir(directory: Path) -> int:
+def _cmd_scan_dir(
+    directory: Path, recursive: bool = False, cases_root: Path | None = None
+) -> int:
     if not directory.is_dir():
         return _fail(f"not a directory: {directory}")
-    files = core.iter_regular_files(directory)
+    files = core.iter_regular_files(directory, recursive=recursive)
     if not files:
         print(f"no regular files found in {directory}")
         return 0
     failures = 0
     for path in files:
         try:
-            case_dir = core.scan_file(path)
+            case_dir = core.scan_file(path, cases_root=cases_root)
         except OSError as exc:
             failures += 1
             print(f"traceforge: could not scan {path}: {exc}", file=sys.stderr)
@@ -148,12 +185,40 @@ def _cmd_carve(path: Path, output: Path) -> int:
     return 0
 
 
+def _cmd_index(cases_root: Path) -> int:
+    if not cases_root.exists():
+        return _fail(f"cases root does not exist: {cases_root}")
+    if not cases_root.is_dir():
+        return _fail(f"not a directory: {cases_root}")
+    try:
+        path = core.write_case_index(cases_root)
+    except OSError as exc:
+        return _fail(f"could not write case index: {exc}")
+    print(f"wrote {path}")
+    return 0
+
+
+def _cmd_diff(
+    left_case_dir: Path, right_case_dir: Path, output: Path | None = None
+) -> int:
+    for case_dir in (left_case_dir, right_case_dir):
+        if not (case_dir / "report.json").is_file():
+            return _fail(f"no report.json in {case_dir}; run 'traceforge scan' first")
+    try:
+        paths = core.write_case_comparison(left_case_dir, right_case_dir, output)
+    except OSError as exc:
+        return _fail(f"could not write case diff: {exc}")
+    for path in paths:
+        print(f"wrote {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "scan":
-        return _cmd_scan(args.file)
+        return _cmd_scan(args.file, args.cases_root)
     if args.command == "scan-dir":
-        return _cmd_scan_dir(args.directory)
+        return _cmd_scan_dir(args.directory, args.recursive, args.cases_root)
     if args.command == "report":
         return _cmd_report(args.case_dir)
     if args.command == "export":
@@ -162,4 +227,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_identify(args.file)
     if args.command == "rules":
         return _cmd_rules(args.file, args.rules_path)
-    return _cmd_carve(args.file, args.output)
+    if args.command == "carve":
+        return _cmd_carve(args.file, args.output)
+    if args.command == "index":
+        return _cmd_index(args.cases_root)
+    return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)
