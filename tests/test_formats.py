@@ -63,6 +63,59 @@ def build_minimal_wasm() -> bytes:
     )
 
 
+def build_minimal_elf() -> bytes:
+    data = bytearray(256)
+    data[0:4] = b"\x7fELF"
+    data[4] = 2
+    data[5] = 1
+    data[6] = 1
+    struct.pack_into(
+        "<HHIQQQIHHHHHH",
+        data,
+        16,
+        2,
+        0x3E,
+        1,
+        0x400000,
+        64,
+        0,
+        0,
+        64,
+        56,
+        1,
+        0,
+        0,
+        0,
+    )
+    struct.pack_into(
+        "<IIQQQQQQ",
+        data,
+        64,
+        1,
+        5,
+        0,
+        0x400000,
+        0x400000,
+        len(data),
+        len(data),
+        0x1000,
+    )
+    return bytes(data)
+
+
+def build_minimal_macho() -> bytes:
+    library = b"/usr/lib/libSystem.B.dylib\x00"
+    command_size = 24 + len(library)
+    command_size += (8 - command_size % 8) % 8
+    data = bytearray(32 + command_size)
+    struct.pack_into("<I", data, 0, 0xFEEDFACF)
+    struct.pack_into("<IIIIIII", data, 4, 0x01000007, 3, 2, 1, command_size, 0, 0)
+    command = 32
+    struct.pack_into("<IIIIII", data, command, 0xC, command_size, 24, 0, 0, 0)
+    data[command + 24 : command + 24 + len(library)] = library
+    return bytes(data)
+
+
 def build_zip() -> bytes:
     body = io.BytesIO()
     with zipfile.ZipFile(body, "w") as archive:
@@ -72,14 +125,39 @@ def build_zip() -> bytes:
 
 
 def test_pe_parser_extracts_sections_and_header():
-    result = analyze_format(build_minimal_pe(), "sample.exe")
+    result = analyze_format(build_minimal_pe() + b"overlay", "sample.exe")
     assert result["kind"] == "pe"
     details = result["details"]
     assert details["format"] == "pe32+"
     assert details["machine"] == "amd64"
     assert details["entry_section"] == ".text"
+    assert "executable_image" in details["characteristic_flags"]
+    assert "dynamic_base" in details["dll_characteristic_flags"]
     assert details["sections"][0]["name"] == ".text"
     assert details["sections"][0]["executable"] is True
+    assert details["sections"][0]["permissions"] == "r-x"
+    assert len(details["sections"][0]["sha256"]) == 64
+    assert details["overlay"]["present"] is True
+    assert details["overlay"]["size"] == len(b"overlay")
+
+
+def test_elf_parser_extracts_program_headers():
+    result = analyze_format(build_minimal_elf(), "sample.elf")
+    assert result["kind"] == "elf"
+    details = result["details"]
+    assert details["machine"] == "x86_64"
+    assert details["program_headers"][0]["type_name"] == "load"
+    assert details["program_headers"][0]["permissions"] == "r-x"
+
+
+def test_macho_parser_extracts_load_commands_and_libraries():
+    result = analyze_format(build_minimal_macho(), "sample")
+    assert result["kind"] == "macho"
+    details = result["details"]
+    assert details["cpu"] == "x86_64"
+    assert details["load_commands"][0]["name"] == "LC_LOAD_DYLIB"
+    assert details["linked_libraries"] == ["/usr/lib/libSystem.B.dylib"]
+    assert details["imports"][0]["library"] == "/usr/lib/libSystem.B.dylib"
 
 
 def test_wasm_parser_extracts_imports_and_exports():
