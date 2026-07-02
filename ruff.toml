@@ -6,3 +6,6 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [lint.isort]
 known-first-party = ["traceforge"]
+
+[lint.per-file-ignores]
+"src/traceforge/formats.py" = ["E501"]
