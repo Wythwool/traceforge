@@ -53,6 +53,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument("case_dir", type=Path, help="path to an existing case folder")
 
+    artifacts = sub.add_parser(
+        "artifacts", help="regenerate CSV and hexdump workbench files for a case"
+    )
+    artifacts.add_argument("case_dir", type=Path, help="path to an existing case folder")
+    artifacts.add_argument(
+        "--source",
+        type=Path,
+        help="optional source file path for hexdump regeneration",
+    )
+    artifacts.add_argument(
+        "--hexdump-limit",
+        type=int,
+        default=8192,
+        help="maximum source bytes to render into hexdump.txt",
+    )
+
     identify = sub.add_parser("identify", help="print format metadata for one file")
     identify.add_argument("file", type=Path, help="path to a regular file")
 
@@ -150,6 +166,26 @@ def _cmd_export(case_dir: Path) -> int:
     return 0
 
 
+def _cmd_artifacts(
+    case_dir: Path,
+    source: Path | None,
+    hexdump_limit: int,
+) -> int:
+    if not (case_dir / "report.json").is_file():
+        return _fail(f"no report.json in {case_dir}; run 'traceforge scan' first")
+    if source is not None and not source.is_file():
+        return _fail(f"source file not found: {source}")
+    if hexdump_limit < 0:
+        return _fail("--hexdump-limit must be zero or greater")
+    try:
+        paths = core.regenerate_artifacts(case_dir, source, hexdump_limit)
+    except OSError as exc:
+        return _fail(f"could not write artifacts for {case_dir}: {exc}")
+    for path in paths:
+        print(f"wrote {path}")
+    return 0
+
+
 def _cmd_identify(path: Path) -> int:
     if not path.is_file():
         return _fail(f"not a regular file: {path}")
@@ -223,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_report(args.case_dir)
     if args.command == "export":
         return _cmd_export(args.case_dir)
+    if args.command == "artifacts":
+        return _cmd_artifacts(args.case_dir, args.source, args.hexdump_limit)
     if args.command == "identify":
         return _cmd_identify(args.file)
     if args.command == "rules":
