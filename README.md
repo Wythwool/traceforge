@@ -43,10 +43,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - URLs, domains, IPv4 values, file paths, registry-style paths
 - Overall entropy, byte-window entropy, and 4096-byte chunk entropy
 - Format metadata for PE, ELF, Mach-O, ZIP/APK/JAR, and WebAssembly
-- PE sections, imports, exports, directories, entry point, subsystem, and
-  section observations
-- ELF sections and header metadata
-- Mach-O header metadata
+- PE sections with permissions, entropy, hashes, imports, exports, directories,
+  overlay metadata, entry point, subsystem, and section observations
+- ELF program headers, sections, permissions, and header metadata
+- Mach-O load commands, linked libraries, segments, sections, and header metadata
 - ZIP/APK/JAR entries, APK permissions when visible, DEX/native-library counts,
   and JAR manifest preview
 - WASM sections, imports, and exports
