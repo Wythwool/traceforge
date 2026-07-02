@@ -12,6 +12,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from traceforge import __version__, workspace
+from traceforge.annotations import (
+    ensure_annotations,
+    update_annotations,
+)
+from traceforge.annotations import (
+    load_annotations as load_case_annotations_file,
+)
 from traceforge.artifacts import write_case_artifacts
 from traceforge.code_map import inspect_code
 from traceforge.formats import analyze_format
@@ -233,6 +240,7 @@ def scan_file(path: Path, cases_root: Path | None = None) -> Path:
 
     _write_json(case_dir / "manifest.json", manifest)
     write_all_reports(case_dir, report)
+    ensure_annotations(case_dir, report)
     graph = build_graph(report)
     _write_json(case_dir / "graph.json", graph)
     write_case_viewer(case_dir, report, graph)
@@ -310,6 +318,43 @@ def regenerate_viewer(case_dir: Path) -> Path:
         else build_graph(report)
     )
     return write_case_viewer(case_dir, report, graph)
+
+
+def load_case_annotations(case_dir: Path) -> dict:
+    """Load analyst annotations for a stored case."""
+    return load_case_annotations_file(case_dir)
+
+
+def annotate_case(
+    case_dir: Path,
+    *,
+    status: str | None = None,
+    add_tags: list[str] | tuple[str, ...] = (),
+    remove_tags: list[str] | tuple[str, ...] = (),
+    note_text: str | None = None,
+    title: str | None = None,
+    author: str | None = None,
+) -> list[Path]:
+    """Update case annotations and refresh the case viewer."""
+    case_dir = Path(case_dir)
+    update_paths = update_annotations(
+        case_dir,
+        status=status,
+        add_tags=add_tags,
+        remove_tags=remove_tags,
+        note_text=note_text,
+        title=title,
+        author=author,
+    )[1]
+    report = load_report(case_dir)
+    graph_path = case_dir / "graph.json"
+    graph = (
+        json.loads(graph_path.read_text(encoding="utf-8"))
+        if graph_path.is_file()
+        else build_graph(report)
+    )
+    viewer_path = write_case_viewer(case_dir, report, graph)
+    return [*update_paths, viewer_path]
 
 
 def write_case_index(cases_root: Path | None = None) -> Path:

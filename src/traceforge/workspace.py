@@ -6,6 +6,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from traceforge.annotations import load_annotations
+
 CASE_INDEX_NAME = "case_index.json"
 
 
@@ -69,6 +71,7 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
     strings = extraction.get("strings", {})
     ascii_total = strings.get("ascii", {}).get("total", 0)
     utf16_total = strings.get("utf16le", {}).get("total", 0)
+    annotations = _safe_annotations(case_dir)
     return {
         "case_id": manifest.get("case_id", Path(case_dir).name),
         "case_dir": str(Path(case_dir)),
@@ -81,6 +84,10 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "format_confidence": fmt.get("confidence", "low"),
         "score": score.get("score", 0),
         "label": score.get("label", "low"),
+        "status": annotations.get("status", "new"),
+        "tags": annotations.get("tags", []),
+        "note_count": len(annotations.get("notes", [])),
+        "annotations_updated_utc": annotations.get("updated_utc", ""),
         "indicator_count": len(extraction.get("indicators", [])),
         "rule_match_count": extraction.get("rules", {}).get("match_count", 0),
         "string_count": ascii_total + utf16_total,
@@ -276,6 +283,13 @@ def render_diff_markdown(diff: dict) -> str:
 def _write_json(path: Path, payload: dict) -> Path:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def _safe_annotations(case_dir: Path) -> dict:
+    try:
+        return load_annotations(case_dir)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {"status": "new", "tags": [], "notes": [], "updated_utc": ""}
 
 
 def _utc_now() -> str:

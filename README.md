@@ -35,6 +35,7 @@ traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json, 
 traceforge export CASE_DIR       # rebuild indicators.csv and indicators.json
 traceforge artifacts CASE_DIR    # rebuild workbench CSVs and hexdump files
 traceforge view CASE_DIR         # rebuild the self-contained case viewer
+traceforge annotate CASE_DIR --status triage --tag packed --note "Needs import review"
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
@@ -90,8 +91,10 @@ Each scan writes:
 - `report.json` - full structured extraction and score
 - `report.html` - self-contained readable report
 - `viewer.html` - self-contained case viewer with searchable graph nodes,
-  related edges, code xrefs, functions, and indicators
+  related edges, analyst notes, code xrefs, functions, and indicators
 - `summary.md` - short analyst summary
+- `annotations.json` / `annotations.md` - case status, tags, notes, and update
+  history
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
   exports, PE resources/debug metadata, code ranges, functions, basic blocks,
@@ -103,10 +106,10 @@ Each scan writes:
 - `artifacts.json` - manifest for generated workbench files
 
 `traceforge index` writes `case_index.json` with one compact row per case:
-source file, hash, size, format, score, indicator count, rule match count,
-string count, PE resource/debug/TLS/certificate counts, import/export counts,
-symbol and relocation counts, code range, function, basic-block and edge counts,
-xref count, and embedded artifact count.
+source file, hash, size, format, score, analyst status, tags, note count,
+indicator count, rule match count, string count, PE resource/debug/TLS/certificate
+counts, import/export counts, symbol and relocation counts, code range, function,
+basic-block and edge counts, xref count, and embedded artifact count.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
@@ -115,6 +118,20 @@ candidates, basic blocks, code xrefs, code edges, certificates, embedded
 artifacts, and string totals.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
+
+## Analyst Annotations
+
+Each case has a small annotation log for day-to-day work. The files are plain
+JSON and Markdown, and the viewer reads them directly.
+
+```bash
+traceforge annotate CASE_DIR --status in_progress
+traceforge annotate CASE_DIR --tag packed --tag needs-symbols
+traceforge annotate CASE_DIR --note "Check the imported crypto APIs" --title "Next step"
+traceforge annotate CASE_DIR
+```
+
+The command rewrites `annotations.json`, `annotations.md`, and `viewer.html`.
 
 ## Local Rules
 

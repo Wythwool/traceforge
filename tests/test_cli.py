@@ -10,6 +10,8 @@ CASE_FILES = {
     "report.html",
     "viewer.html",
     "summary.md",
+    "annotations.json",
+    "annotations.md",
     "indicators.csv",
     "indicators.json",
     "graph.json",
@@ -160,6 +162,42 @@ def test_view_command_regenerates_viewer(tmp_path, monkeypatch):
     text = (case_dir / "viewer.html").read_text(encoding="utf-8")
     assert "viewer-data" in text
     assert "TraceForge viewer" in text
+
+
+def test_annotate_command_updates_case_notes(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    sample = tmp_path / "sample.bin"
+    write_sample(sample)
+    assert cli.main(["scan", str(sample)]) == 0
+    case_dir = case_dirs(tmp_path)[0]
+
+    assert cli.main(["annotate", str(case_dir), "--status", "triage"]) == 0
+    assert (
+        cli.main(
+            [
+                "annotate",
+                str(case_dir),
+                "--tag",
+                "Needs Review",
+                "--note",
+                "Follow up on the network indicator.",
+                "--title",
+                "Review",
+                "--author",
+                "Analyst",
+            ]
+        )
+        == 0
+    )
+    assert cli.main(["annotate", str(case_dir)]) == 0
+
+    out = capsys.readouterr().out
+    assert "annotations.json" in out
+    assert "status=triage" in out
+    assert "needs-review" in (case_dir / "annotations.json").read_text(encoding="utf-8")
+    assert "Follow up on the network indicator." in (
+        case_dir / "viewer.html"
+    ).read_text(encoding="utf-8")
 
 
 def test_index_and_diff_commands(tmp_path, monkeypatch):

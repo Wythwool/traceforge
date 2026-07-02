@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from traceforge import __version__, core
+from traceforge.annotations import VALID_STATUSES
 from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
 from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv, write_xrefs_csv
@@ -77,6 +78,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     viewer = sub.add_parser("view", help="regenerate viewer.html for a case")
     viewer.add_argument("case_dir", type=Path, help="path to an existing case folder")
+
+    annotate = sub.add_parser("annotate", help="update case status, tags, and notes")
+    annotate.add_argument("case_dir", type=Path, help="path to an existing case folder")
+    annotate.add_argument(
+        "--status",
+        choices=VALID_STATUSES,
+        help="set the analyst status for the case",
+    )
+    annotate.add_argument(
+        "--tag",
+        action="append",
+        default=[],
+        help="add a case tag; repeat the option for multiple tags",
+    )
+    annotate.add_argument(
+        "--remove-tag",
+        action="append",
+        default=[],
+        help="remove a case tag; repeat the option for multiple tags",
+    )
+    annotate.add_argument("--note", help="append an analyst note")
+    annotate.add_argument("--title", help="title for the appended note")
+    annotate.add_argument(
+        "--author",
+        help="name written on the appended note; defaults to analyst",
+    )
 
     identify = sub.add_parser("identify", help="print format metadata for one file")
     identify.add_argument("file", type=Path, help="path to a regular file")
@@ -246,6 +273,36 @@ def _cmd_view(case_dir: Path) -> int:
     except OSError as exc:
         return _fail(f"could not write viewer for {case_dir}: {exc}")
     print(f"wrote {path}")
+    return 0
+
+
+def _cmd_annotate(args: argparse.Namespace) -> int:
+    case_dir = args.case_dir
+    if not (case_dir / "report.json").is_file():
+        return _fail(f"no report.json in {case_dir}; run 'traceforge scan' first")
+    has_update = bool(args.status or args.tag or args.remove_tag or args.note is not None)
+    if not has_update:
+        payload = core.load_case_annotations(case_dir)
+        tags = ", ".join(payload.get("tags", [])) or "none"
+        print(
+            f"status={payload.get('status', 'new')} "
+            f"tags={tags} notes={len(payload.get('notes', []))}"
+        )
+        return 0
+    try:
+        paths = core.annotate_case(
+            case_dir,
+            status=args.status,
+            add_tags=args.tag,
+            remove_tags=args.remove_tag,
+            note_text=args.note,
+            title=args.title,
+            author=args.author,
+        )
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not update annotations for {case_dir}: {exc}")
+    for path in paths:
+        print(f"wrote {path}")
     return 0
 
 
@@ -425,6 +482,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_artifacts(args.case_dir, args.source, args.hexdump_limit)
     if args.command == "view":
         return _cmd_view(args.case_dir)
+    if args.command == "annotate":
+        return _cmd_annotate(args)
     if args.command == "identify":
         return _cmd_identify(args.file)
     if args.command == "rules":

@@ -6,6 +6,7 @@ import html
 import json
 from pathlib import Path
 
+from traceforge.annotations import load_annotations
 from traceforge.graph import build_graph
 
 MAX_VIEWER_NODES = 900
@@ -255,6 +256,7 @@ _SCRIPT = """
 const payload = JSON.parse(document.getElementById("viewer-data").textContent);
 const report = payload.report;
 const graph = payload.graph;
+const annotations = payload.annotations || {};
 const nodes = graph.nodes || [];
 const edges = graph.edges || [];
 const colors = {
@@ -488,6 +490,29 @@ function renderDetail() {
     }))
   );
 }
+function renderAnnotations() {
+  const notes = annotations.notes || [];
+  const tags = (annotations.tags || []).join(", ") || "none";
+  renderRows(
+    document.getElementById("annotation-table"),
+    ["field", "value"],
+    [
+      { field: "status", value: annotations.status || "new" },
+      { field: "tags", value: tags },
+      { field: "notes", value: notes.length },
+      { field: "updated", value: annotations.updated_utc || "" }
+    ]
+  );
+  renderRows(
+    document.getElementById("note-table"),
+    ["title", "author", "text"],
+    notes.map(note => ({
+      title: note.title || note.id || "",
+      author: note.author || "",
+      text: note.text || ""
+    }))
+  );
+}
 function renderSummaryTables() {
   const extraction = report.extraction || {};
   renderRows(
@@ -511,11 +536,17 @@ renderFilters();
 renderNodeList();
 renderGraph();
 renderDetail();
+renderAnnotations();
 renderSummaryTables();
 """
 
 
-def write_case_viewer(case_dir: Path, report: dict, graph: dict | None = None) -> Path:
+def write_case_viewer(
+    case_dir: Path,
+    report: dict,
+    graph: dict | None = None,
+    annotations: dict | None = None,
+) -> Path:
     """Write a self-contained HTML viewer for a stored case."""
     target = Path(case_dir) / "viewer.html"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -523,6 +554,9 @@ def write_case_viewer(case_dir: Path, report: dict, graph: dict | None = None) -
     payload = {
         "report": _viewer_report(report),
         "graph": _viewer_graph(graph),
+        "annotations": _viewer_annotations(
+            annotations if annotations is not None else load_annotations(target.parent)
+        ),
     }
     target.write_text(render_case_viewer(payload), encoding="utf-8")
     return target
@@ -577,6 +611,9 @@ def render_case_viewer(payload: dict) -> str:
             '<h2 id="detail-title">Selection</h2>',
             '<span id="detail-kind" class="pill">node</span>',
             '<div id="detail-fields"></div>',
+            "<h3>Analyst Notes</h3>",
+            '<div id="annotation-table"></div>',
+            '<div id="note-table"></div>',
             "<h3>Related Edges</h3>",
             '<div id="detail-edges"></div>',
             "<h3>Code Xrefs</h3>",
@@ -633,6 +670,25 @@ def _viewer_graph(graph: dict) -> dict:
             "nodes": len(graph.get("nodes", [])) > len(nodes),
             "edges": len(graph.get("edges", [])) > len(edges),
         },
+    }
+
+
+def _viewer_annotations(payload: dict) -> dict:
+    return {
+        "status": payload.get("status", "new"),
+        "tags": payload.get("tags", []),
+        "updated_utc": payload.get("updated_utc", ""),
+        "notes": [
+            {
+                "id": note.get("id", ""),
+                "created_utc": note.get("created_utc", ""),
+                "author": note.get("author", ""),
+                "title": note.get("title", ""),
+                "text": note.get("text", ""),
+                "tags": note.get("tags", []),
+            }
+            for note in payload.get("notes", [])[:MAX_VIEWER_ROWS]
+        ],
     }
 
 

@@ -21,6 +21,9 @@ def test_build_case_index_summarizes_cases(tmp_path):
     assert index["error_count"] == 0
     assert {case["file_name"] for case in index["cases"]} == {"one.bin", "two.bin"}
     assert all(case["sha256"] for case in index["cases"])
+    assert all(case["status"] == "new" for case in index["cases"])
+    assert all(case["tags"] == [] for case in index["cases"])
+    assert all(case["note_count"] == 0 for case in index["cases"])
     assert all(case["indicator_count"] >= 2 for case in index["cases"])
     assert all("resource_count" in case for case in index["cases"])
     assert all("debug_entry_count" in case for case in index["cases"])

@@ -45,6 +45,7 @@ def test_render_case_viewer_embeds_parseable_payload():
 
     assert embedded["report"]["manifest"]["file_name"] == "sample.bin"
     assert embedded["graph"]["nodes"][0]["type"] == "sample"
+    assert "Analyst Notes" in html
     assert "Code Xrefs" in html
     assert "function renderGraph" in html
 
@@ -67,3 +68,4 @@ def test_write_case_viewer_creates_static_html(tmp_path):
     assert path.name == "viewer.html"
     assert payload["graph"]["node_count"] >= 1
     assert payload["report"]["extraction"]["indicators"]
+    assert payload["annotations"]["status"] == "new"
