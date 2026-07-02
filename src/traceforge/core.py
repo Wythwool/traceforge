@@ -13,6 +13,7 @@ from pathlib import Path
 
 from traceforge import __version__, workspace
 from traceforge.artifacts import write_case_artifacts
+from traceforge.code_map import inspect_code
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.reports import (
@@ -181,6 +182,7 @@ def extract(data: bytes, filename: str = "") -> dict:
     }
     result["format"] = analyze_format(data, filename)
     result["symbols"] = inspect_symbols(data, filename, result["format"])
+    result["code"] = inspect_code(data, filename, result["format"], result["symbols"])
     result["rules"] = evaluate_rules(result)
     return result
 

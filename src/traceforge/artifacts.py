@@ -6,6 +6,8 @@ import csv
 import json
 from pathlib import Path
 
+from traceforge.code_map import write_code_csv
+
 DEFAULT_HEXDUMP_LIMIT = 8192
 
 
@@ -26,6 +28,7 @@ def write_case_artifacts(
         _write_imports_csv(target / "imports.csv", report),
         _write_exports_csv(target / "exports.csv", report),
         _write_symbols_csv(target / "symbols.csv", report),
+        write_code_csv(target / "code.csv", report.get("extraction", {}).get("code", {})),
         _write_findings_csv(target / "findings.csv", report),
     ]
 

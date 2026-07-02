@@ -81,6 +81,31 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                 "relocations": [],
                 "needed_libraries": [],
             },
+            "code": {
+                "ranges": [
+                    {
+                        "name": ".text",
+                        "kind": "section",
+                        "offset": 512,
+                        "size": 128,
+                        "virtual_address": 4096,
+                        "permissions": "r-x",
+                    }
+                ],
+                "functions": [{"name": "entry", "address": 4096, "offset": 512}],
+                "instructions": [
+                    {
+                        "range": ".text",
+                        "offset": 512,
+                        "address": 4096,
+                        "size": 1,
+                        "mnemonic": "ret",
+                        "operands": "",
+                        "bytes": "c3",
+                    }
+                ],
+                "edges": [],
+            },
             "rules": {
                 "matches": [
                     {
@@ -115,12 +140,14 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "imports.csv",
         "exports.csv",
         "symbols.csv",
+        "code.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
     assert "CreateFileW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "sample.dll" in (tmp_path / "case" / "exports.csv").read_text()
     assert "Run" in (tmp_path / "case" / "symbols.csv").read_text()
+    assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()

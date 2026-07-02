@@ -1,9 +1,9 @@
 """Graph construction for TraceForge cases.
 
-Node types: sample, format, section, import, export, symbol, chunk, string,
-indicator, rule_match, embedded_artifact, finding.
+Node types: sample, format, section, import, export, symbol, code_range,
+function, chunk, string, indicator, rule_match, embedded_artifact, finding.
 Edge types: contains, references, has_indicator, has_finding, has_format,
-has_rule, imports, exports, defines, embeds.
+has_rule, imports, exports, defines, calls, branches, embeds.
 """
 
 # Caps keep graph.json readable for very large inputs.
@@ -12,6 +12,8 @@ MAX_GRAPH_CHUNKS = 256
 MAX_GRAPH_IMPORTS = 256
 MAX_GRAPH_EXPORTS = 256
 MAX_GRAPH_SYMBOLS = 256
+MAX_GRAPH_FUNCTIONS = 256
+MAX_GRAPH_CODE_RANGES = 128
 MAX_GRAPH_SECTIONS = 256
 LABEL_MAX = 80
 
@@ -22,6 +24,8 @@ NODE_TYPES = (
     "import",
     "export",
     "symbol",
+    "code_range",
+    "function",
     "chunk",
     "string",
     "indicator",
@@ -39,6 +43,8 @@ EDGE_TYPES = (
     "imports",
     "exports",
     "defines",
+    "calls",
+    "branches",
     "embeds",
 )
 
@@ -85,6 +91,7 @@ def build_graph(report: dict) -> dict:
     )
     edges.append({"source": sample_id, "target": format_id, "type": "has_format"})
     _add_format_nodes(nodes, edges, sample_id, extraction)
+    _add_code_nodes(nodes, edges, sample_id, extraction)
 
     for record in extraction["chunks"]["records"][:MAX_GRAPH_CHUNKS]:
         node_id = f"chunk:{record['index']}"
@@ -263,6 +270,69 @@ def _add_format_nodes(
         edges.append({"source": sample_id, "target": node_id, "type": "embeds"})
 
 
+def _add_code_nodes(
+    nodes: list[dict],
+    edges: list[dict],
+    sample_id: str,
+    extraction: dict,
+) -> None:
+    code = extraction.get("code", {})
+    ranges = code.get("ranges", [])
+    for index, item in enumerate(ranges[:MAX_GRAPH_CODE_RANGES]):
+        node_id = f"code_range:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "code_range",
+                "label": _short(item.get("name", f"code range {index}")),
+                "name": item.get("name", ""),
+                "offset": item.get("offset", 0),
+                "size": item.get("size", 0),
+                "virtual_address": item.get("virtual_address", 0),
+                "permissions": item.get("permissions", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    functions = code.get("functions", [])
+    function_nodes = {}
+    for index, item in enumerate(functions[:MAX_GRAPH_FUNCTIONS]):
+        address = item.get("address")
+        if not isinstance(address, int):
+            continue
+        node_id = f"function:{index}"
+        function_nodes[address] = node_id
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "function",
+                "label": _short(item.get("name", f"sub_{address:x}")),
+                "name": item.get("name", ""),
+                "address": address,
+                "offset": item.get("offset"),
+                "source": item.get("source", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "contains"})
+
+    function_starts = sorted(function_nodes)
+    for item in code.get("edges", []):
+        target = item.get("target")
+        source = item.get("source")
+        if not isinstance(target, int) or not isinstance(source, int):
+            continue
+        source_id = _function_node_for_address(source, function_starts, function_nodes)
+        target_id = function_nodes.get(target)
+        if source_id and target_id:
+            edges.append(
+                {
+                    "source": source_id,
+                    "target": target_id,
+                    "type": "calls" if item.get("kind") == "call" else "branches",
+                }
+            )
+
+
 def _flatten_imports(imports: list) -> list[str]:
     values = []
     for item in imports:
@@ -293,6 +363,19 @@ def _dedupe_values(values: list[str]) -> list[str]:
         seen.add(key)
         unique.append(value)
     return unique
+
+
+def _function_node_for_address(
+    address: int,
+    starts: list[int],
+    nodes_by_address: dict[int, str],
+) -> str | None:
+    owner = None
+    for start in starts:
+        if start > address:
+            break
+        owner = start
+    return nodes_by_address.get(owner) if owner is not None else None
 
 
 def _flatten_exports(exports: list) -> list[str]:

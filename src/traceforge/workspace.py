@@ -65,6 +65,7 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
     score = report.get("score", {})
     fmt = extraction.get("format", {})
     details = fmt.get("details", {})
+    code = extraction.get("code", {})
     strings = extraction.get("strings", {})
     ascii_total = strings.get("ascii", {}).get("total", 0)
     utf16_total = strings.get("utf16le", {}).get("total", 0)
@@ -88,6 +89,9 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "export_count": len(details.get("exports", [])),
         "symbol_count": len(extraction.get("symbols", {}).get("symbols", [])),
         "relocation_count": _count_relocations(extraction.get("symbols", {})),
+        "code_range_count": len(code.get("ranges", [])),
+        "function_count": len(code.get("functions", [])),
+        "code_edge_count": len(code.get("edges", [])),
         "embedded_artifact_count": len(fmt.get("embedded", [])),
     }
 
@@ -114,6 +118,10 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     relocations = _diff_values(
         _relocation_values(left_extraction), _relocation_values(right_extraction)
     )
+    functions = _diff_values(_function_values(left_extraction), _function_values(right_extraction))
+    code_edges = _diff_values(
+        _code_edge_values(left_extraction), _code_edge_values(right_extraction)
+    )
     embedded = _diff_values(
         _embedded_values(left_extraction), _embedded_values(right_extraction)
     )
@@ -133,6 +141,8 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "sections": sections,
         "symbols": symbols,
         "relocations": relocations,
+        "functions": functions,
+        "code_edges": code_edges,
         "embedded_artifacts": embedded,
         "strings": _string_delta(left_extraction, right_extraction),
     }
@@ -205,6 +215,14 @@ def render_diff_markdown(diff: dict) -> str:
             "## Relocations",
             "",
             _render_value_counts(diff["relocations"]),
+            "",
+            "## Functions",
+            "",
+            _render_value_counts(diff["functions"]),
+            "",
+            "## Code Edges",
+            "",
+            _render_value_counts(diff["code_edges"]),
             "",
         ]
     )
@@ -322,6 +340,26 @@ def _relocation_values(extraction: dict) -> set[str]:
     return values
 
 
+def _function_values(extraction: dict) -> set[str]:
+    values = set()
+    for item in extraction.get("code", {}).get("functions", []):
+        address = item.get("address")
+        name = item.get("name", "")
+        if isinstance(address, int):
+            values.add(f"{address:x}:{name}".lower())
+    return values
+
+
+def _code_edge_values(extraction: dict) -> set[str]:
+    values = set()
+    for item in extraction.get("code", {}).get("edges", []):
+        source = item.get("source")
+        target = item.get("target")
+        if isinstance(source, int) and isinstance(target, int):
+            values.add(f"{item.get('kind', '')}:{source:x}->{target:x}".lower())
+    return values
+
+
 def _embedded_values(extraction: dict) -> set[str]:
     return {
         f"{item.get('kind', '')}@{item.get('offset', '')}"
@@ -366,6 +404,8 @@ def _diff_summary(diff: dict) -> list[str]:
         ("sections", "section"),
         ("symbols", "symbol"),
         ("relocations", "relocation"),
+        ("functions", "function"),
+        ("code_edges", "code edge"),
         ("embedded_artifacts", "embedded artifact"),
     ):
         item = diff[key]

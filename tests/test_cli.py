@@ -19,6 +19,7 @@ CASE_FILES = {
     "imports.csv",
     "exports.csv",
     "symbols.csv",
+    "code.csv",
     "findings.csv",
     "hexdump.txt",
 }
@@ -112,6 +113,7 @@ def test_artifacts_regenerate(tmp_path, monkeypatch):
         "imports.csv",
         "exports.csv",
         "symbols.csv",
+        "code.csv",
         "findings.csv",
         "hexdump.txt",
     ):
@@ -125,6 +127,7 @@ def test_artifacts_regenerate(tmp_path, monkeypatch):
         "imports.csv",
         "exports.csv",
         "symbols.csv",
+        "code.csv",
         "findings.csv",
         "hexdump.txt",
     ):

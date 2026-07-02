@@ -42,6 +42,7 @@ def test_report_json_content(tmp_path):
     assert report["manifest"]["file_name"] == "sample.bin"
     assert report["manifest"]["sha256"] == report["extraction"]["hashes"]["sha256"]
     assert "symbols" in report["extraction"]
+    assert "code" in report["extraction"]
     assert 0 <= report["score"]["score"] <= report["score"]["max_score"]
     manifest = json.loads((case_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest == report["manifest"]
@@ -68,10 +69,12 @@ def test_html_and_summary_render(tmp_path):
     assert "sample.bin" in html_text
     assert "Indicators" in html_text
     assert "Symbols" in html_text
+    assert "Code Map" in html_text
     assert "</html>" in html_text
     summary = (case_dir / "summary.md").read_text(encoding="utf-8")
     assert summary.startswith("# TraceForge summary: sample.bin")
     assert "Symbols:" in summary
+    assert "Code:" in summary
     assert hashlib.sha256(SAMPLE).hexdigest() in summary
 
 

@@ -91,6 +91,7 @@ def render_report_html(report: dict) -> str:
         "<h2>Format</h2>",
         _format_html(format_info),
         _symbols_html(extraction.get("symbols", {})),
+        _code_html(extraction.get("code", {})),
         "<h2>Score</h2>",
         f'<p><span class="badge {label}">{label}</span> '
         f"{score['score']} / {score['max_score']}</p>",
@@ -226,6 +227,11 @@ def render_summary_md(report: dict) -> str:
             f"- Symbols: {len(extraction.get('symbols', {}).get('symbols', []))} total, "
             f"{len(extraction.get('symbols', {}).get('imports', []))} imports, "
             f"{len(extraction.get('symbols', {}).get('exports', []))} exports"
+        ),
+        (
+            f"- Code: {len(extraction.get('code', {}).get('ranges', []))} ranges, "
+            f"{len(extraction.get('code', {}).get('functions', []))} functions, "
+            f"{len(extraction.get('code', {}).get('edges', []))} edges"
         ),
         f"- Score: {score['score']}/{score['max_score']} ({score['label']})",
         "",
@@ -374,6 +380,81 @@ def _symbols_html(symbol_info: dict) -> str:
     return "\n".join(parts)
 
 
+def _code_html(code_info: dict) -> str:
+    if not code_info:
+        return ""
+    parts = ["<h2>Code Map</h2>"]
+    entry = code_info.get("entry_point", {})
+    parts.append(
+        _table(
+            ("field", "value"),
+            [
+                ("architecture", code_info.get("architecture", "unknown")),
+                ("ranges", len(code_info.get("ranges", []))),
+                ("functions", len(code_info.get("functions", []))),
+                ("instructions", len(code_info.get("instructions", []))),
+                ("edges", len(code_info.get("edges", []))),
+                ("entry address", _hex_or_empty(entry.get("address"))),
+                ("entry offset", _hex_or_empty(entry.get("offset"))),
+            ],
+        )
+    )
+    ranges = code_info.get("ranges", [])
+    if ranges:
+        parts.append("<h3>Executable ranges</h3>")
+        parts.append(
+            _table(
+                ("name", "kind", "offset", "size", "address", "permissions"),
+                [
+                    (
+                        item.get("name", ""),
+                        item.get("kind", ""),
+                        _hex_or_empty(item.get("offset")),
+                        item.get("size", ""),
+                        _hex_or_empty(item.get("virtual_address")),
+                        item.get("permissions", ""),
+                    )
+                    for item in ranges[:64]
+                ],
+            )
+        )
+    functions = code_info.get("functions", [])
+    if functions:
+        parts.append("<h3>Function candidates</h3>")
+        parts.append(
+            _table(
+                ("name", "address", "offset", "source"),
+                [
+                    (
+                        item.get("name", ""),
+                        _hex_or_empty(item.get("address")),
+                        _hex_or_empty(item.get("offset")),
+                        item.get("source", ""),
+                    )
+                    for item in functions[:128]
+                ],
+            )
+        )
+    instructions = code_info.get("instructions", [])
+    if instructions:
+        parts.append("<h3>Instruction preview</h3>")
+        parts.append(
+            _table(
+                ("address", "bytes", "mnemonic", "operands"),
+                [
+                    (
+                        _hex_or_empty(item.get("address")),
+                        item.get("bytes", ""),
+                        item.get("mnemonic", ""),
+                        item.get("operands", ""),
+                    )
+                    for item in instructions[:128]
+                ],
+            )
+        )
+    return "\n".join(parts)
+
+
 def _format_import_rows(imports: list) -> list[str]:
     rows = []
     for item in imports:
@@ -392,6 +473,10 @@ def _format_import_rows(imports: list) -> list[str]:
         elif "name" in item:
             rows.append(item["name"])
     return rows
+
+
+def _hex_or_empty(value: int | None) -> str:
+    return "" if value is None else f"0x{value:x}"
 
 
 def _format_export_rows(exports: list) -> list[str]:

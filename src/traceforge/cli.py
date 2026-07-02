@@ -8,6 +8,8 @@ from pathlib import Path
 
 from traceforge import __version__, core
 from traceforge.carve import carve_file
+from traceforge.code_map import dumps as dump_code
+from traceforge.code_map import inspect_code_file, write_code_csv
 from traceforge.search import search_file
 from traceforge.symbols import dumps as dump_symbols
 from traceforge.symbols import inspect_symbols_file, write_symbols_csv
@@ -124,6 +126,11 @@ def build_parser() -> argparse.ArgumentParser:
     symbols.add_argument("file", type=Path, help="path to a regular file")
     symbols.add_argument("--json", action="store_true", help="print full JSON output")
     symbols.add_argument("--csv", type=Path, help="write a flat symbol CSV")
+
+    code = sub.add_parser("code", help="map executable ranges and instruction previews")
+    code.add_argument("file", type=Path, help="path to a regular file")
+    code.add_argument("--json", action="store_true", help="print full JSON output")
+    code.add_argument("--csv", type=Path, help="write instruction preview CSV")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -316,6 +323,35 @@ def _cmd_symbols(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_code(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = inspect_code_file(args.file)
+        if args.csv is not None:
+            write_code_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except OSError as exc:
+        return _fail(f"could not inspect code for {args.file}: {exc}")
+    if args.json:
+        print(dump_code(payload), end="")
+        return 0
+    print(
+        f"architecture {payload.get('architecture', 'unknown')} "
+        f"ranges={len(payload.get('ranges', []))} "
+        f"functions={len(payload.get('functions', []))} "
+        f"instructions={len(payload.get('instructions', []))}"
+    )
+    for item in payload.get("functions", [])[:32]:
+        offset = item.get("offset")
+        offset_text = "" if offset is None else f" offset=0x{offset:x}"
+        print(f"function 0x{item['address']:x} {item['name']}{offset_text}")
+    for item in payload.get("instructions", [])[:64]:
+        operands = f" {item['operands']}" if item.get("operands") else ""
+        print(f"0x{item['address']:x} {item['mnemonic']}{operands}".rstrip())
+    return 0
+
+
 def _cmd_index(cases_root: Path) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
@@ -366,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_search(args)
     if args.command == "symbols":
         return _cmd_symbols(args)
+    if args.command == "code":
+        return _cmd_code(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)
