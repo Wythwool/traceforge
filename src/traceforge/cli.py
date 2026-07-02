@@ -226,6 +226,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="case storage root; defaults to .traceforge/cases",
     )
 
+    db_cmd = sub.add_parser("db", help="build or query the SQLite case database")
+    db_sub = db_cmd.add_subparsers(dest="db_command", required=True)
+    db_build = db_sub.add_parser("build", help="build traceforge.db from stored cases")
+    db_build.add_argument(
+        "cases_root",
+        nargs="?",
+        type=Path,
+        default=core.default_cases_root(),
+        help="case storage root; defaults to .traceforge/cases",
+    )
+    db_build.add_argument("-o", "--output", type=Path, help="database path")
+
+    db_query = db_sub.add_parser("query", help="query a built SQLite case database")
+    db_query.add_argument(
+        "database",
+        nargs="?",
+        type=Path,
+        default=Path(".traceforge") / "cases" / "traceforge.db",
+        help="database path; defaults to .traceforge/cases/traceforge.db",
+    )
+    db_query.add_argument("--format", dest="format_kind", help="filter by format kind")
+    db_query.add_argument("--status", help="filter by analyst status")
+    db_query.add_argument("--tag", help="filter by exact tag")
+    db_query.add_argument("--rule", dest="rule_id", help="filter by exact rule id")
+    db_query.add_argument("--indicator", help="filter by indicator substring")
+    db_query.add_argument("--min-score", type=int, help="minimum score")
+    db_query.add_argument("--limit", type=int, default=50, help="maximum rows to return")
+    db_query.add_argument("--json", action="store_true", help="print full JSON output")
+
     workspace = sub.add_parser(
         "workspace", help="write case_index.json and workspace.html for a cases root"
     )
@@ -592,6 +621,49 @@ def _cmd_index(cases_root: Path) -> int:
     return 0
 
 
+def _cmd_db(args: argparse.Namespace) -> int:
+    if args.db_command == "build":
+        if not args.cases_root.exists():
+            return _fail(f"cases root does not exist: {args.cases_root}")
+        if not args.cases_root.is_dir():
+            return _fail(f"not a directory: {args.cases_root}")
+        try:
+            payload = core.build_case_database(args.cases_root, args.output)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            return _fail(f"could not build case database: {exc}")
+        print(f"wrote {payload['database']}")
+        print(f"indexed {payload['case_count']} case(s)")
+        if payload["error_count"]:
+            print(f"errors: {payload['error_count']}")
+        return 0
+
+    if not args.database.is_file():
+        return _fail(f"database not found: {args.database}")
+    try:
+        payload = core.query_case_database(
+            args.database,
+            format_kind=args.format_kind,
+            status=args.status,
+            tag=args.tag,
+            rule_id=args.rule_id,
+            indicator=args.indicator,
+            min_score=args.min_score,
+            limit=args.limit,
+        )
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not query case database: {exc}")
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    for item in payload["cases"]:
+        print(
+            f"{item['score']:3d} {item['format']:<6} {item['status']:<12} "
+            f"{item['case_id']} {item['file_name']}"
+        )
+    print(f"{payload['count']} case(s)")
+    return 0
+
+
 def _cmd_workspace(cases_root: Path, hunt_path: Path | None) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
@@ -677,6 +749,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_code(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
+    if args.command == "db":
+        return _cmd_db(args)
     if args.command == "workspace":
         return _cmd_workspace(args.cases_root, args.hunt_path)
     if args.command == "hunt":

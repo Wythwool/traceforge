@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from traceforge import __version__, workspace
+from traceforge import __version__, case_db, workspace
 from traceforge import ruleset as ruleset_tools
 from traceforge.annotations import (
     ensure_annotations,
@@ -364,6 +364,39 @@ def annotate_case(
 def write_case_index(cases_root: Path | None = None) -> Path:
     root = cases_root if cases_root is not None else default_cases_root()
     return workspace.write_case_index(root)
+
+
+def build_case_database(
+    cases_root: Path | None = None,
+    db_path: Path | None = None,
+) -> dict:
+    """Build a SQLite database for a cases root."""
+    root = cases_root if cases_root is not None else default_cases_root()
+    return case_db.build_case_database(root, db_path)
+
+
+def query_case_database(
+    db_path: Path,
+    *,
+    format_kind: str | None = None,
+    status: str | None = None,
+    tag: str | None = None,
+    rule_id: str | None = None,
+    indicator: str | None = None,
+    min_score: int | None = None,
+    limit: int = case_db.DEFAULT_LIMIT,
+) -> dict:
+    """Query cases from a SQLite database."""
+    return case_db.query_case_database(
+        db_path,
+        format_kind=format_kind,
+        status=status,
+        tag=tag,
+        rule_id=rule_id,
+        indicator=indicator,
+        min_score=min_score,
+        limit=limit,
+    )
 
 
 def write_workspace_browser(

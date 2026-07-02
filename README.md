@@ -55,6 +55,8 @@ traceforge code FILE --csv code.csv
 traceforge code FILE --decoder capstone --blocks-csv blocks.csv
 traceforge code FILE --xrefs-csv xrefs.csv
 traceforge index                 # write .traceforge/cases/case_index.json
+traceforge db build              # write .traceforge/cases/traceforge.db
+traceforge db query --indicator example.com --json
 traceforge workspace             # write case_index.json and workspace.html
 traceforge workspace --hunt hunt-out/hunt.json
 traceforge hunt                  # evaluate built-in rules across stored cases
@@ -126,6 +128,12 @@ status/format/tag filters, case metrics, latest-note previews, hunt match
 counts, per-case rule hits, and links into each case viewer, report, summary,
 and annotation log. When `CASES_ROOT/hunt/hunt.json` exists it is embedded
 automatically; `--hunt` can point at another hunt result.
+
+`traceforge db build CASES_ROOT` writes a SQLite database for a cases root.
+The database stores case summaries, indicators, rule matches, and tags in
+separate tables. `traceforge db query` can filter by format, status, tag,
+rule ID, indicator substring, and minimum score. Use `--json` when the output
+is being passed to another tool.
 
 `traceforge hunt` evaluates built-in or JSON-defined rules against every stored
 case report in a cases root. It writes `hunt.json`, `hunt.csv`, and `hunt.md`
