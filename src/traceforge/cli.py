@@ -179,6 +179,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="case storage root; defaults to .traceforge/cases",
     )
 
+    workspace = sub.add_parser(
+        "workspace", help="write case_index.json and workspace.html for a cases root"
+    )
+    workspace.add_argument(
+        "cases_root",
+        nargs="?",
+        type=Path,
+        default=core.default_cases_root(),
+        help="case storage root; defaults to .traceforge/cases",
+    )
+
     diff = sub.add_parser("diff", help="compare two case folders")
     diff.add_argument("left_case_dir", type=Path, help="first case folder")
     diff.add_argument("right_case_dir", type=Path, help="second case folder")
@@ -453,6 +464,20 @@ def _cmd_index(cases_root: Path) -> int:
     return 0
 
 
+def _cmd_workspace(cases_root: Path) -> int:
+    if not cases_root.exists():
+        return _fail(f"cases root does not exist: {cases_root}")
+    if not cases_root.is_dir():
+        return _fail(f"not a directory: {cases_root}")
+    try:
+        paths = core.write_workspace_browser(cases_root)
+    except OSError as exc:
+        return _fail(f"could not write workspace browser: {exc}")
+    for path in paths:
+        print(f"wrote {path}")
+    return 0
+
+
 def _cmd_diff(
     left_case_dir: Path, right_case_dir: Path, output: Path | None = None
 ) -> int:
@@ -498,4 +523,6 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_code(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
+    if args.command == "workspace":
+        return _cmd_workspace(args.cases_root)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)

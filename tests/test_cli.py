@@ -213,6 +213,11 @@ def test_index_and_diff_commands(tmp_path, monkeypatch):
 
     assert cli.main(["index", str(cases_root)]) == 0
     assert (cases_root / "case_index.json").is_file()
+    assert cli.main(["workspace", str(cases_root)]) == 0
+    assert (cases_root / "workspace.html").is_file()
+    assert "workspace-data" in (cases_root / "workspace.html").read_text(
+        encoding="utf-8"
+    )
 
     cases = case_dirs(tmp_path)
     output = tmp_path / "comparison"

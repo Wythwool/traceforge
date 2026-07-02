@@ -72,6 +72,7 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
     ascii_total = strings.get("ascii", {}).get("total", 0)
     utf16_total = strings.get("utf16le", {}).get("total", 0)
     annotations = _safe_annotations(case_dir)
+    latest_note = _latest_note(annotations)
     return {
         "case_id": manifest.get("case_id", Path(case_dir).name),
         "case_dir": str(Path(case_dir)),
@@ -87,6 +88,10 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "status": annotations.get("status", "new"),
         "tags": annotations.get("tags", []),
         "note_count": len(annotations.get("notes", [])),
+        "latest_note_title": latest_note.get("title", ""),
+        "latest_note_text": latest_note.get("text", ""),
+        "latest_note_author": latest_note.get("author", ""),
+        "latest_note_utc": latest_note.get("created_utc", ""),
         "annotations_updated_utc": annotations.get("updated_utc", ""),
         "indicator_count": len(extraction.get("indicators", [])),
         "rule_match_count": extraction.get("rules", {}).get("match_count", 0),
@@ -290,6 +295,11 @@ def _safe_annotations(case_dir: Path) -> dict:
         return load_annotations(case_dir)
     except (OSError, json.JSONDecodeError, ValueError):
         return {"status": "new", "tags": [], "notes": [], "updated_utc": ""}
+
+
+def _latest_note(annotations: dict) -> dict:
+    notes = annotations.get("notes", [])
+    return notes[-1] if notes else {}
 
 
 def _utc_now() -> str:

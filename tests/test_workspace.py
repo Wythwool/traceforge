@@ -24,6 +24,7 @@ def test_build_case_index_summarizes_cases(tmp_path):
     assert all(case["status"] == "new" for case in index["cases"])
     assert all(case["tags"] == [] for case in index["cases"])
     assert all(case["note_count"] == 0 for case in index["cases"])
+    assert all("latest_note_text" in case for case in index["cases"])
     assert all(case["indicator_count"] >= 2 for case in index["cases"])
     assert all("resource_count" in case for case in index["cases"])
     assert all("debug_entry_count" in case for case in index["cases"])

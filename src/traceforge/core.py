@@ -33,6 +33,7 @@ from traceforge.rules import evaluate_rules, load_rules
 from traceforge.score import score_extraction
 from traceforge.symbols import inspect_symbols
 from traceforge.viewer import write_case_viewer
+from traceforge.workspace_viewer import write_workspace_viewer
 
 CHUNK_SIZE = 4096
 WINDOW_SIZE = 256
@@ -360,6 +361,15 @@ def annotate_case(
 def write_case_index(cases_root: Path | None = None) -> Path:
     root = cases_root if cases_root is not None else default_cases_root()
     return workspace.write_case_index(root)
+
+
+def write_workspace_browser(cases_root: Path | None = None) -> list[Path]:
+    """Write case_index.json and workspace.html for a cases root."""
+    root = cases_root if cases_root is not None else default_cases_root()
+    index_path = workspace.write_case_index(root)
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    viewer_path = write_workspace_viewer(root, index)
+    return [index_path, viewer_path]
 
 
 def build_cases_index(cases_root: Path | None = None) -> dict:
