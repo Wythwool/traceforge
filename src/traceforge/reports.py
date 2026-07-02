@@ -56,6 +56,8 @@ def render_report_html(report: dict) -> str:
     indicators = extraction["indicators"]
     chunks = extraction["chunks"]
     strings = extraction["strings"]
+    format_info = extraction.get("format", {})
+    rules = extraction.get("rules", {})
     window = extraction["entropy"]["byte_window"]
     label = score["label"]
     title = f"TraceForge report: {manifest['file_name']}"
@@ -86,6 +88,8 @@ def render_report_html(report: dict) -> str:
         "<h2>Hashes</h2>",
         _table(("algorithm", "digest"), sorted(extraction["hashes"].items())),
         f"<p>First bytes (hex): <code>{first_bytes}</code></p>",
+        "<h2>Format</h2>",
+        _format_html(format_info),
         "<h2>Score</h2>",
         f'<p><span class="badge {label}">{label}</span> '
         f"{score['score']} / {score['max_score']}</p>",
@@ -125,6 +129,25 @@ def render_report_html(report: dict) -> str:
             )
     else:
         parts.append('<p class="note">No indicators found.</p>')
+
+    parts.append(f"<h2>Rule matches ({rules.get('match_count', 0)})</h2>")
+    if rules.get("matches"):
+        parts.append(
+            _table(
+                ("id", "level", "name", "evidence"),
+                [
+                    (
+                        match["id"],
+                        match["level"],
+                        match["name"],
+                        "; ".join(match["evidence"]),
+                    )
+                    for match in rules["matches"]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No local rules matched.</p>')
 
     parts.append("<h2>Entropy</h2>")
     parts.append(
@@ -187,6 +210,8 @@ def render_summary_md(report: dict) -> str:
     extraction = report["extraction"]
     score = report["score"]
     counts = Counter(item["type"] for item in extraction["indicators"])
+    format_info = extraction.get("format", {})
+    rules = extraction.get("rules", {})
 
     lines = [
         f"# TraceForge summary: {manifest['file_name']}",
@@ -195,6 +220,7 @@ def render_summary_md(report: dict) -> str:
         f"- Source: `{manifest['source_path']}`",
         f"- Size: {extraction['size']} bytes",
         f"- SHA-256: `{extraction['hashes']['sha256']}`",
+        f"- Format: {format_info.get('kind', 'raw')}",
         f"- Score: {score['score']}/{score['max_score']} ({score['label']})",
         "",
         "## Indicator counts",
@@ -209,6 +235,15 @@ def render_summary_md(report: dict) -> str:
         lines.extend(
             f"- {reason['signal']} (+{reason['points']}): {reason['detail']}"
             for reason in score["reasons"]
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Rule matches"])
+    if rules.get("matches"):
+        lines.extend(
+            f"- {match['id']} ({match['level']}): {match['name']}"
+            for match in rules["matches"]
         )
     else:
         lines.append("- none")
@@ -229,6 +264,111 @@ def render_summary_md(report: dict) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _format_html(format_info: dict) -> str:
+    details = format_info.get("details", {})
+    parts = [
+        _table(
+            ("field", "value"),
+            [
+                ("kind", format_info.get("kind", "raw")),
+                ("confidence", format_info.get("confidence", "low")),
+                ("extension", format_info.get("extension", "")),
+                ("error", format_info.get("error", "")),
+            ],
+        )
+    ]
+
+    sections = details.get("sections") or details.get("segments") or []
+    if sections:
+        parts.append("<h3>Sections / segments</h3>")
+        parts.append(
+            _table(
+                ("name", "offset", "size", "flags"),
+                [
+                    (
+                        section.get("name", ""),
+                        section.get(
+                            "raw_offset",
+                            section.get("offset", section.get("fileoff", "")),
+                        ),
+                        section.get("raw_size", section.get("size", section.get("filesize", ""))),
+                        section.get("characteristics", section.get("flags", "")),
+                    )
+                    for section in sections[:64]
+                ],
+            )
+        )
+
+    imports = _format_import_rows(details.get("imports", []))
+    if imports:
+        parts.append("<h3>Imports</h3>")
+        parts.append(_table(("name",), [(item,) for item in imports[:128]]))
+
+    exports = _format_export_rows(details.get("exports", []))
+    if exports:
+        parts.append("<h3>Exports</h3>")
+        parts.append(_table(("name",), [(item,) for item in exports[:128]]))
+
+    entries = details.get("entries", [])
+    if entries:
+        parts.append("<h3>Container entries</h3>")
+        parts.append(
+            _table(
+                ("name", "size", "compressed", "crc32"),
+                [
+                    (
+                        entry.get("name"),
+                        entry.get("size"),
+                        entry.get("compressed_size"),
+                        entry.get("crc32"),
+                    )
+                    for entry in entries[:128]
+                ],
+            )
+        )
+
+    embedded = format_info.get("embedded", [])
+    if embedded:
+        parts.append("<h3>Embedded artifacts</h3>")
+        parts.append(
+            _table(
+                ("kind", "offset", "magic"),
+                [(item["kind"], item["offset"], item["magic"]) for item in embedded],
+            )
+        )
+    return "\n".join(parts)
+
+
+def _format_import_rows(imports: list) -> list[str]:
+    rows = []
+    for item in imports:
+        if isinstance(item, str):
+            rows.append(item)
+        elif "library" in item:
+            library = item.get("library", "")
+            symbols = item.get("symbols", [])
+            if not symbols:
+                rows.append(library)
+            for symbol in symbols:
+                name = symbol.get("name") or f"ordinal_{symbol.get('ordinal')}"
+                rows.append(f"{library}!{name}" if library else name)
+        elif "module" in item:
+            rows.append(f"{item.get('module')}::{item.get('name')}")
+        elif "name" in item:
+            rows.append(item["name"])
+    return rows
+
+
+def _format_export_rows(exports: list) -> list[str]:
+    rows = []
+    for item in exports:
+        if isinstance(item, str):
+            rows.append(item)
+        elif "name" in item:
+            rows.append(item["name"])
+    return rows
 
 
 def write_report_json(case_dir: Path, report: dict) -> Path:
