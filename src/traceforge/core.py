@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from traceforge import __version__, workspace
+from traceforge.artifacts import write_case_artifacts
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.reports import (
@@ -228,6 +229,7 @@ def scan_file(path: Path, cases_root: Path | None = None) -> Path:
     _write_json(case_dir / "manifest.json", manifest)
     write_all_reports(case_dir, report)
     _write_json(case_dir / "graph.json", build_graph(report))
+    write_case_artifacts(case_dir, report, source_path=path)
     return case_dir
 
 
@@ -275,6 +277,17 @@ def regenerate_exports(case_dir: Path) -> list[Path]:
     case_dir = Path(case_dir)
     report = load_report(case_dir)
     return write_indicator_exports(case_dir, report)
+
+
+def regenerate_artifacts(
+    case_dir: Path,
+    source_path: Path | None = None,
+    hexdump_limit: int = 8192,
+) -> list[Path]:
+    """Rebuild workbench artifact files for a stored case."""
+    case_dir = Path(case_dir)
+    report = load_report(case_dir)
+    return write_case_artifacts(case_dir, report, source_path, hexdump_limit)
 
 
 def write_case_index(cases_root: Path | None = None) -> Path:
