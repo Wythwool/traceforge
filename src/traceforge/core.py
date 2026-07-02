@@ -364,12 +364,15 @@ def write_case_index(cases_root: Path | None = None) -> Path:
     return workspace.write_case_index(root)
 
 
-def write_workspace_browser(cases_root: Path | None = None) -> list[Path]:
+def write_workspace_browser(
+    cases_root: Path | None = None,
+    hunt_path: Path | None = None,
+) -> list[Path]:
     """Write case_index.json and workspace.html for a cases root."""
     root = cases_root if cases_root is not None else default_cases_root()
     index_path = workspace.write_case_index(root)
     index = json.loads(index_path.read_text(encoding="utf-8"))
-    viewer_path = write_workspace_viewer(root, index)
+    viewer_path = write_workspace_viewer(root, index, _load_workspace_hunt(root, hunt_path))
     return [index_path, viewer_path]
 
 
@@ -409,3 +412,10 @@ def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:
     path = Path(path)
     extraction = extract(path.read_bytes(), path.name)
     return evaluate_rules(extraction, load_rules(rules_path))
+
+
+def _load_workspace_hunt(cases_root: Path, hunt_path: Path | None) -> dict | None:
+    path = Path(hunt_path) if hunt_path is not None else Path(cases_root) / "hunt" / "hunt.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))

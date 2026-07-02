@@ -189,6 +189,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=core.default_cases_root(),
         help="case storage root; defaults to .traceforge/cases",
     )
+    workspace.add_argument(
+        "--hunt",
+        dest="hunt_path",
+        type=Path,
+        help="optional hunt.json to embed; defaults to CASES_ROOT/hunt/hunt.json when present",
+    )
 
     hunt = sub.add_parser("hunt", help="evaluate rules across stored cases")
     hunt.add_argument(
@@ -485,14 +491,16 @@ def _cmd_index(cases_root: Path) -> int:
     return 0
 
 
-def _cmd_workspace(cases_root: Path) -> int:
+def _cmd_workspace(cases_root: Path, hunt_path: Path | None) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
     if not cases_root.is_dir():
         return _fail(f"not a directory: {cases_root}")
+    if hunt_path is not None and not hunt_path.is_file():
+        return _fail(f"hunt file not found: {hunt_path}")
     try:
-        paths = core.write_workspace_browser(cases_root)
-    except OSError as exc:
+        paths = core.write_workspace_browser(cases_root, hunt_path)
+    except (OSError, json.JSONDecodeError) as exc:
         return _fail(f"could not write workspace browser: {exc}")
     for path in paths:
         print(f"wrote {path}")
@@ -565,7 +573,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "index":
         return _cmd_index(args.cases_root)
     if args.command == "workspace":
-        return _cmd_workspace(args.cases_root)
+        return _cmd_workspace(args.cases_root, args.hunt_path)
     if args.command == "hunt":
         return _cmd_hunt(args.cases_root, args.rules_path, args.output)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)

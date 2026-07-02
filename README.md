@@ -51,6 +51,7 @@ traceforge code FILE --decoder capstone --blocks-csv blocks.csv
 traceforge code FILE --xrefs-csv xrefs.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge workspace             # write case_index.json and workspace.html
+traceforge workspace --hunt hunt-out/hunt.json
 traceforge hunt                  # evaluate built-in rules across stored cases
 traceforge hunt --rules rules.json -o hunt-out
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
@@ -116,8 +117,10 @@ basic-block and edge counts, xref count, and embedded artifact count.
 
 `traceforge workspace` writes `case_index.json` and `workspace.html`.
 `workspace.html` is a self-contained browser for the cases root, with search,
-status/format/tag filters, case metrics, latest-note previews, and links into
-each case viewer, report, summary, and annotation log.
+status/format/tag filters, case metrics, latest-note previews, hunt match
+counts, per-case rule hits, and links into each case viewer, report, summary,
+and annotation log. When `CASES_ROOT/hunt/hunt.json` exists it is embedded
+automatically; `--hunt` can point at another hunt result.
 
 `traceforge hunt` evaluates built-in or JSON-defined rules against every stored
 case report in a cases root. It writes `hunt.json`, `hunt.csv`, and `hunt.md`
@@ -143,6 +146,7 @@ traceforge annotate CASE_DIR --note "Check the imported crypto APIs" --title "Ne
 traceforge annotate CASE_DIR
 traceforge workspace
 traceforge hunt --rules rules.json
+traceforge workspace --hunt hunt/hunt.json
 ```
 
 The command rewrites `annotations.json`, `annotations.md`, and `viewer.html`.

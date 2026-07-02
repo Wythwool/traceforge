@@ -42,14 +42,33 @@ def test_render_workspace_viewer_embeds_case_rows(tmp_path):
         "errors": [],
     }
 
-    html = render_workspace_viewer(tmp_path, index)
+    hunt = {
+        "rules_path": "rules.json",
+        "rule_count": 1,
+        "match_count": 1,
+        "matched_case_count": 1,
+        "matches": [
+            {
+                "case_id": "sample.bin-abc",
+                "rule_id": "custom.sample",
+                "name": "Sample marker",
+                "level": "medium",
+                "evidence": ["ascii:sample marker"],
+            }
+        ],
+    }
+
+    html = render_workspace_viewer(tmp_path, index, hunt)
     payload = _script_payload(html)
 
     assert payload["case_count"] == 1
+    assert payload["hunt"]["match_count"] == 1
+    assert payload["hunt"]["matches"][0]["rule_id"] == "custom.sample"
     assert payload["cases"][0]["status"] == "triage"
     assert payload["cases"][0]["latest_note_text"] == "Open in the case viewer first."
     assert payload["cases"][0]["viewer_href"].endswith("viewer.html")
     assert "TraceForge workspace" in html
+    assert "Hunt Matches" in html
     assert "function renderWorkspace" in html
 
 
@@ -67,14 +86,24 @@ def test_write_workspace_viewer_links_to_case_files(tmp_path):
         add_tags=("Needs Review",),
         note_text="Open in the case viewer first.",
     )
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        '{"rules":[{"id":"custom.one","name":"One","any":[{"contains":"one"}]}]}',
+        encoding="utf-8",
+    )
+    hunt_paths = core.write_case_hunt(cases_root, rules, tmp_path / "hunt")
+    hunt = json.loads((tmp_path / "hunt" / "hunt.json").read_text(encoding="utf-8"))
 
     index = core.build_cases_index(cases_root)
-    path = write_workspace_viewer(cases_root, index)
+    path = write_workspace_viewer(cases_root, index, hunt)
 
     text = path.read_text(encoding="utf-8")
     payload = _script_payload(text)
     assert path.name == "workspace.html"
     assert payload["case_count"] == 2
+    assert {path.name for path in hunt_paths} == {"hunt.json", "hunt.csv", "hunt.md"}
+    assert payload["hunt"]["match_count"] == 1
+    assert payload["hunt"]["matches"][0]["rule_id"] == "custom.one"
     assert any(case["tags"] == ["needs-review"] for case in payload["cases"])
     assert any(
         "Open in the case viewer first." in case["latest_note_text"]

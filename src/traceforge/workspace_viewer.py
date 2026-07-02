@@ -199,6 +199,12 @@ a:hover {
 _SCRIPT = """
 const payload = JSON.parse(document.getElementById("workspace-data").textContent);
 const cases = payload.cases || [];
+const hunt = payload.hunt || { matches: [] };
+const huntByCase = new Map();
+for (const match of hunt.matches || []) {
+  if (!huntByCase.has(match.case_id)) huntByCase.set(match.case_id, []);
+  huntByCase.get(match.case_id).push(match);
+}
 const state = {
   q: "",
   status: "all",
@@ -236,7 +242,8 @@ function setupFilters() {
   };
 }
 function matches(row) {
-  const hay = JSON.stringify(row).toLowerCase();
+  const hay = `${JSON.stringify(row)} ${JSON.stringify(huntByCase.get(row.case_id) || [])}`
+    .toLowerCase();
   return hay.includes(state.q)
     && (state.status === "all" || row.status === state.status)
     && (state.format === "all" || row.format === state.format)
@@ -290,6 +297,7 @@ function renderWorkspace() {
       el("td", {}, String(row.indicator_count || 0)),
       el("td", {}, String(row.function_count || 0)),
       el("td", {}, String(row.xref_count || 0)),
+      el("td", {}, String((huntByCase.get(row.case_id) || []).length)),
       el("td", {}, String(row.note_count || 0))
     );
     body.appendChild(tr);
@@ -307,6 +315,7 @@ function renderDetail() {
   detail.appendChild(el("h2", {}, row.file_name || row.case_id));
   detail.appendChild(el("div", { class: "subline" }, row.case_id));
   detail.appendChild(caseLinks(row));
+  const huntRows = huntByCase.get(row.case_id) || [];
   const dl = el("dl", { class: "kv" });
   for (const [key, value] of [
     ["sha256", row.sha256],
@@ -325,6 +334,7 @@ function renderDetail() {
     ["functions", row.function_count],
     ["basic blocks", row.basic_block_count],
     ["xrefs", row.xref_count],
+    ["hunt matches", huntRows.length],
     ["notes", row.note_count],
     ["latest note", row.latest_note_text || row.latest_note_title || ""],
     ["note author", row.latest_note_author || ""],
@@ -333,6 +343,28 @@ function renderDetail() {
     dl.append(el("dt", {}, key), el("dd", {}, String(value ?? "")));
   }
   detail.appendChild(dl);
+  detail.appendChild(el("h3", {}, "Hunt Matches"));
+  detail.appendChild(renderHuntRows(huntRows));
+}
+function renderHuntRows(rows) {
+  if (!rows.length) return el("div", { class: "empty" }, "No hunt matches for this case.");
+  const table = el("table");
+  const head = el("thead");
+  const headRow = el("tr");
+  for (const title of ["Level", "Rule", "Evidence"]) headRow.appendChild(el("th", {}, title));
+  head.appendChild(headRow);
+  const body = el("tbody");
+  for (const row of rows.slice(0, 40)) {
+    const tr = el("tr");
+    tr.append(
+      el("td", {}, row.level || "info"),
+      el("td", {}, row.rule_id || row.name || ""),
+      el("td", {}, short((row.evidence || []).join("; "), 160))
+    );
+    body.appendChild(tr);
+  }
+  table.append(head, body);
+  return table;
 }
 setupFilters();
 renderWorkspace();
@@ -340,19 +372,28 @@ renderDetail();
 """
 
 
-def write_workspace_viewer(cases_root: Path, index: dict) -> Path:
+def write_workspace_viewer(
+    cases_root: Path,
+    index: dict,
+    hunt: dict | None = None,
+) -> Path:
     """Write workspace.html below a cases root."""
     root = Path(cases_root)
     root.mkdir(parents=True, exist_ok=True)
     target = root / WORKSPACE_VIEWER_NAME
-    target.write_text(render_workspace_viewer(root, index), encoding="utf-8")
+    target.write_text(render_workspace_viewer(root, index, hunt), encoding="utf-8")
     return target
 
 
-def render_workspace_viewer(cases_root: Path, index: dict) -> str:
+def render_workspace_viewer(
+    cases_root: Path,
+    index: dict,
+    hunt: dict | None = None,
+) -> str:
     """Render a complete static workspace browser."""
-    payload = _viewer_payload(cases_root, index)
+    payload = _viewer_payload(cases_root, index, hunt)
     cases = payload.get("cases", [])
+    hunt_payload = payload.get("hunt", {})
     high_score = max((case.get("score", 0) for case in cases), default=0)
     open_count = sum(1 for case in cases if case.get("status") not in {"benign", "done"})
     note_count = sum(int(case.get("note_count", 0)) for case in cases)
@@ -378,6 +419,8 @@ def render_workspace_viewer(cases_root: Path, index: dict) -> str:
             _metric("visible", '<span id="visible-count">0</span>', raw=True),
             _metric("open", open_count),
             _metric("high score", high_score),
+            _metric("rule hits", hunt_payload.get("match_count", 0)),
+            _metric("hit cases", hunt_payload.get("matched_case_count", 0)),
             _metric("notes", note_count),
             "</div>",
             "</header>",
@@ -392,7 +435,7 @@ def render_workspace_viewer(cases_root: Path, index: dict) -> str:
             "<table>",
             "<thead><tr>",
             "<th>Case</th><th>Format</th><th>Status</th><th>Tags</th>",
-            "<th>Score</th><th>IOCs</th><th>Funcs</th><th>Xrefs</th><th>Notes</th>",
+            "<th>Score</th><th>IOCs</th><th>Funcs</th><th>Xrefs</th><th>Rules</th><th>Notes</th>",
             "</tr></thead>",
             '<tbody id="case-body"></tbody>',
             "</table>",
@@ -409,7 +452,7 @@ def render_workspace_viewer(cases_root: Path, index: dict) -> str:
     )
 
 
-def _viewer_payload(cases_root: Path, index: dict) -> dict:
+def _viewer_payload(cases_root: Path, index: dict, hunt: dict | None) -> dict:
     root = Path(cases_root)
     cases = [
         _case_for_viewer(root, row)
@@ -420,6 +463,7 @@ def _viewer_payload(cases_root: Path, index: dict) -> dict:
         "cases_root": str(root),
         "case_count": index.get("case_count", len(cases)),
         "error_count": index.get("error_count", 0),
+        "hunt": _viewer_hunt(hunt),
         "cases": cases,
         "errors": index.get("errors", []),
         "truncated": len(index.get("cases", [])) > len(cases),
@@ -471,6 +515,33 @@ def _case_for_viewer(cases_root: Path, row: dict) -> dict:
                 "label": "annotations",
                 "href": _relative_href(cases_root, case_dir / "annotations.md"),
             },
+        ],
+    }
+
+
+def _viewer_hunt(payload: dict | None) -> dict:
+    if not payload:
+        return {
+            "rules_path": "",
+            "rule_count": 0,
+            "match_count": 0,
+            "matched_case_count": 0,
+            "matches": [],
+        }
+    return {
+        "rules_path": payload.get("rules_path", ""),
+        "rule_count": payload.get("rule_count", 0),
+        "match_count": payload.get("match_count", 0),
+        "matched_case_count": payload.get("matched_case_count", 0),
+        "matches": [
+            {
+                "case_id": item.get("case_id", ""),
+                "rule_id": item.get("rule_id", ""),
+                "name": item.get("name", ""),
+                "level": item.get("level", "info"),
+                "evidence": item.get("evidence", []),
+            }
+            for item in payload.get("matches", [])[:1000]
         ],
     }
 
