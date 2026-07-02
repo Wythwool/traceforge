@@ -90,6 +90,7 @@ def render_report_html(report: dict) -> str:
         f"<p>First bytes (hex): <code>{first_bytes}</code></p>",
         "<h2>Format</h2>",
         _format_html(format_info),
+        _symbols_html(extraction.get("symbols", {})),
         "<h2>Score</h2>",
         f'<p><span class="badge {label}">{label}</span> '
         f"{score['score']} / {score['max_score']}</p>",
@@ -221,6 +222,11 @@ def render_summary_md(report: dict) -> str:
         f"- Size: {extraction['size']} bytes",
         f"- SHA-256: `{extraction['hashes']['sha256']}`",
         f"- Format: {format_info.get('kind', 'raw')}",
+        (
+            f"- Symbols: {len(extraction.get('symbols', {}).get('symbols', []))} total, "
+            f"{len(extraction.get('symbols', {}).get('imports', []))} imports, "
+            f"{len(extraction.get('symbols', {}).get('exports', []))} exports"
+        ),
         f"- Score: {score['score']}/{score['max_score']} ({score['label']})",
         "",
         "## Indicator counts",
@@ -338,6 +344,33 @@ def _format_html(format_info: dict) -> str:
                 [(item["kind"], item["offset"], item["magic"]) for item in embedded],
             )
         )
+    return "\n".join(parts)
+
+
+def _symbols_html(symbol_info: dict) -> str:
+    if not symbol_info:
+        return ""
+    parts = ["<h2>Symbols</h2>"]
+    parts.append(
+        _table(
+            ("field", "value"),
+            [
+                ("imports", len(symbol_info.get("imports", []))),
+                ("exports", len(symbol_info.get("exports", []))),
+                ("symbols", len(symbol_info.get("symbols", []))),
+                ("needed libraries", ", ".join(symbol_info.get("needed_libraries", []))),
+                ("relocation blocks", len(symbol_info.get("relocations", []))),
+            ],
+        )
+    )
+    rows = []
+    for source in ("imports", "exports", "symbols"):
+        for item in symbol_info.get(source, [])[:128]:
+            name = item.get("name", "")
+            if name:
+                rows.append((source, name, item.get("kind", ""), item.get("binding", "")))
+    if rows:
+        parts.append(_table(("source", "name", "kind", "binding"), rows))
     return "\n".join(parts)
 
 
