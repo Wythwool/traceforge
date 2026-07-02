@@ -149,6 +149,18 @@ def test_index_and_diff_commands(tmp_path, monkeypatch):
     assert (output / "diff.md").is_file()
 
 
+def test_search_command_prints_matches(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    sample = tmp_path / "sample.bin"
+    sample.write_bytes(b"alpha marker beta\n")
+
+    assert cli.main(["search", str(sample), "--text", "marker", "--hex", "6d 61 ?? 6b"]) == 0
+    out = capsys.readouterr().out
+    assert "0x6" in out
+    assert "text" in out
+    assert "hex" in out
+
+
 def test_scan_missing_file_fails(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert cli.main(["scan", str(tmp_path / "missing.bin")]) == 2
