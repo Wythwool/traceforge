@@ -25,6 +25,7 @@ def write_case_artifacts(
         _write_sections_csv(target / "sections.csv", report),
         _write_imports_csv(target / "imports.csv", report),
         _write_exports_csv(target / "exports.csv", report),
+        _write_symbols_csv(target / "symbols.csv", report),
         _write_findings_csv(target / "findings.csv", report),
     ]
 
@@ -151,6 +152,26 @@ def _write_exports_csv(path: Path, report: dict) -> Path:
     return path
 
 
+def _write_symbols_csv(path: Path, report: dict) -> Path:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["source", "name", "kind", "binding", "section", "value", "size"])
+        for source in ("imports", "exports", "symbols"):
+            for item in _symbol_rows(report, source):
+                writer.writerow(
+                    [
+                        source,
+                        item.get("name", ""),
+                        item.get("kind", item.get("type", "")),
+                        item.get("binding", ""),
+                        item.get("section", item.get("section_index", "")),
+                        item.get("value", ""),
+                        item.get("size", ""),
+                    ]
+                )
+    return path
+
+
 def _write_findings_csv(path: Path, report: dict) -> Path:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -202,6 +223,14 @@ def _observations(report: dict) -> list[dict]:
         .get("format", {})
         .get("details", {})
         .get("observations", [])
+    )
+
+
+def _symbol_rows(report: dict, source: str) -> list[dict]:
+    return (
+        report.get("extraction", {})
+        .get("symbols", {})
+        .get(source, [])
     )
 
 
