@@ -42,6 +42,9 @@ traceforge rules FILE --rules rules.json
 traceforge ruleset validate rules.json
 traceforge ruleset list rules.json
 traceforge ruleset export -o built-in-rules.json
+traceforge schema list
+traceforge schema show report
+traceforge schema export-all -o schemas
 traceforge carve FILE -o carved  # carve embedded artifacts into a folder
 traceforge extract FILE -o extracted
 traceforge extract FILE --resources --overlay -o extracted --json
@@ -138,6 +141,11 @@ is being passed to another tool.
 `traceforge hunt` evaluates built-in or JSON-defined rules against every stored
 case report in a cases root. It writes `hunt.json`, `hunt.csv`, and `hunt.md`
 with the matched cases, rule IDs, levels, and evidence.
+
+`traceforge schema` lists, prints, or exports JSON Schemas for the main
+machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
+`extract_manifest.json`, and external rule sets. These schemas are intended for
+pipeline validation, typed clients, and long-lived case archives.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,

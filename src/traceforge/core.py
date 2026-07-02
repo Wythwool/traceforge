@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
-from traceforge import __version__, case_db, workspace
+from traceforge import __version__, case_db, schemas, workspace
 from traceforge import ruleset as ruleset_tools
 from traceforge.annotations import (
     ensure_annotations,
@@ -434,6 +434,31 @@ def describe_ruleset(path: Path | None = None) -> dict:
 def export_ruleset(output: Path, source: Path | None = None) -> Path:
     """Export built-in rules or normalize a JSON rule file."""
     return ruleset_tools.export_ruleset(output, source)
+
+
+def schema_names() -> list[str]:
+    """Return available JSON Schema names."""
+    return schemas.schema_names()
+
+
+def get_schema(name: str) -> dict:
+    """Return a copy of a built-in JSON Schema."""
+    return schemas.get_schema(name)
+
+
+def dumps_schema(name: str) -> str:
+    """Return a built-in JSON Schema as formatted JSON."""
+    return schemas.dumps_schema(name)
+
+
+def export_schema(name: str, output: Path) -> Path:
+    """Write one built-in JSON Schema."""
+    return schemas.export_schema(name, output)
+
+
+def export_all_schemas(output_dir: Path) -> list[Path]:
+    """Write every built-in JSON Schema to a directory."""
+    return schemas.export_all_schemas(output_dir)
 
 
 def build_cases_index(cases_root: Path | None = None) -> dict:

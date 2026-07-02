@@ -148,6 +148,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="destination JSON file",
     )
 
+    schema = sub.add_parser("schema", help="list, show, or export JSON schemas")
+    schema_sub = schema.add_subparsers(dest="schema_command", required=True)
+    schema_sub.add_parser("list", help="list available schema names")
+    schema_show = schema_sub.add_parser("show", help="print one schema as JSON")
+    schema_show.add_argument("name", help="schema name")
+    schema_export = schema_sub.add_parser("export", help="write one schema")
+    schema_export.add_argument("name", help="schema name")
+    schema_export.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        type=Path,
+        help="destination file or directory",
+    )
+    schema_export_all = schema_sub.add_parser("export-all", help="write every schema")
+    schema_export_all.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        type=Path,
+        help="destination directory",
+    )
+
     carve = sub.add_parser("carve", help="carve embedded artifacts from one file")
     carve.add_argument("file", type=Path, help="path to a regular file")
     carve.add_argument(
@@ -475,6 +498,26 @@ def _cmd_ruleset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_schema(args: argparse.Namespace) -> int:
+    try:
+        if args.schema_command == "list":
+            for name in core.schema_names():
+                print(name)
+            return 0
+        if args.schema_command == "show":
+            print(core.dumps_schema(args.name), end="")
+            return 0
+        if args.schema_command == "export":
+            path = core.export_schema(args.name, args.output)
+            print(f"wrote {path}")
+            return 0
+        for path in core.export_all_schemas(args.output):
+            print(f"wrote {path}")
+        return 0
+    except (OSError, ValueError) as exc:
+        return _fail(f"could not write schema: {exc}")
+
+
 def _cmd_carve(path: Path, output: Path) -> int:
     if not path.is_file():
         return _fail(f"not a regular file: {path}")
@@ -737,6 +780,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_rules(args.file, args.rules_path)
     if args.command == "ruleset":
         return _cmd_ruleset(args)
+    if args.command == "schema":
+        return _cmd_schema(args)
     if args.command == "carve":
         return _cmd_carve(args.file, args.output)
     if args.command == "extract":
