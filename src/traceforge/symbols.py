@@ -42,9 +42,9 @@ def inspect_symbols_file(path: Path) -> dict:
     return inspect_symbols(path.read_bytes(), path.name)
 
 
-def inspect_symbols(data: bytes, filename: str = "") -> dict:
+def inspect_symbols(data: bytes, filename: str = "", format_info: dict | None = None) -> dict:
     """Return symbols, imports, exports, libraries, and relocations when visible."""
-    format_info = analyze_format(data, filename)
+    format_info = format_info if format_info is not None else analyze_format(data, filename)
     kind = format_info.get("kind", "raw")
     details = format_info.get("details", {})
     payload = {
