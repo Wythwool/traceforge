@@ -46,6 +46,7 @@ traceforge symbols FILE --csv symbols.csv
 traceforge code FILE --json
 traceforge code FILE --csv code.csv
 traceforge code FILE --decoder capstone --blocks-csv blocks.csv
+traceforge code FILE --xrefs-csv xrefs.csv
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 ```
@@ -72,6 +73,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Static executable code ranges, entry point mapping, function candidates, basic
   blocks, call/branch edges, and bounded instruction previews for common native
   code
+- Code cross-references that link call and branch sources to resolved function
+  candidates, code ranges, and offsets when visible
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
@@ -87,10 +90,10 @@ Each scan writes:
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
   exports, PE resources/debug metadata, code ranges, functions, basic blocks,
-  strings, indicators, rule matches, findings, and embedded artifacts
+  code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
-  `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`, and
-  `findings.csv` - table exports for day-to-day case work
+  `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
+  `xrefs.csv`, and `findings.csv` - table exports for day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -98,13 +101,13 @@ Each scan writes:
 source file, hash, size, format, score, indicator count, rule match count,
 string count, PE resource/debug/TLS/certificate counts, import/export counts,
 symbol and relocation counts, code range, function, basic-block and edge counts,
-and embedded artifact count.
+xref count, and embedded artifact count.
 
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
-candidates, basic blocks, code edges, certificates, embedded artifacts, and
-string totals.
+candidates, basic blocks, code xrefs, code edges, certificates, embedded
+artifacts, and string totals.
 
 Scores are deterministic from 0 to 100. Every score reason includes evidence.
 

@@ -96,6 +96,7 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "code_range_count": len(code.get("ranges", [])),
         "function_count": len(code.get("functions", [])),
         "basic_block_count": len(code.get("basic_blocks", [])),
+        "xref_count": len(code.get("xrefs", [])),
         "code_edge_count": len(code.get("edges", [])),
         "embedded_artifact_count": len(fmt.get("embedded", [])),
     }
@@ -133,6 +134,7 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     basic_blocks = _diff_values(
         _basic_block_values(left_extraction), _basic_block_values(right_extraction)
     )
+    xrefs = _diff_values(_xref_values(left_extraction), _xref_values(right_extraction))
     code_edges = _diff_values(
         _code_edge_values(left_extraction), _code_edge_values(right_extraction)
     )
@@ -162,6 +164,7 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "relocations": relocations,
         "functions": functions,
         "basic_blocks": basic_blocks,
+        "xrefs": xrefs,
         "code_edges": code_edges,
         "certificates": certificates,
         "embedded_artifacts": embedded,
@@ -252,6 +255,10 @@ def render_diff_markdown(diff: dict) -> str:
             "## Basic Blocks",
             "",
             _render_value_counts(diff["basic_blocks"]),
+            "",
+            "## Code Xrefs",
+            "",
+            _render_value_counts(diff["xrefs"]),
             "",
             "## Code Edges",
             "",
@@ -426,6 +433,19 @@ def _basic_block_values(extraction: dict) -> set[str]:
     return values
 
 
+def _xref_values(extraction: dict) -> set[str]:
+    values = set()
+    for item in extraction.get("code", {}).get("xrefs", []):
+        source = item.get("source")
+        target = item.get("target")
+        if isinstance(source, int) and isinstance(target, int):
+            values.add(
+                f"{item.get('kind', '')}:{source:x}->{target:x}:"
+                f"{item.get('target_kind', '')}:{item.get('target_name', '')}".lower()
+            )
+    return values
+
+
 def _code_edge_values(extraction: dict) -> set[str]:
     values = set()
     for item in extraction.get("code", {}).get("edges", []):
@@ -492,6 +512,7 @@ def _diff_summary(diff: dict) -> list[str]:
         ("relocations", "relocation"),
         ("functions", "function"),
         ("basic_blocks", "basic block"),
+        ("xrefs", "code xref"),
         ("code_edges", "code edge"),
         ("certificates", "certificate"),
         ("embedded_artifacts", "embedded artifact"),

@@ -9,7 +9,7 @@ from pathlib import Path
 from traceforge import __version__, core
 from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
-from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv
+from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv, write_xrefs_csv
 from traceforge.search import search_file
 from traceforge.symbols import dumps as dump_symbols
 from traceforge.symbols import inspect_symbols_file, write_symbols_csv
@@ -138,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     code.add_argument("--json", action="store_true", help="print full JSON output")
     code.add_argument("--csv", type=Path, help="write instruction preview CSV")
     code.add_argument("--blocks-csv", type=Path, help="write basic block CSV")
+    code.add_argument("--xrefs-csv", type=Path, help="write code cross-reference CSV")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -341,6 +342,9 @@ def _cmd_code(args: argparse.Namespace) -> int:
         if args.blocks_csv is not None:
             write_blocks_csv(args.blocks_csv, payload)
             print(f"wrote {args.blocks_csv}")
+        if args.xrefs_csv is not None:
+            write_xrefs_csv(args.xrefs_csv, payload)
+            print(f"wrote {args.xrefs_csv}")
     except OSError as exc:
         return _fail(f"could not inspect code for {args.file}: {exc}")
     if args.json:
@@ -352,6 +356,7 @@ def _cmd_code(args: argparse.Namespace) -> int:
         f"ranges={len(payload.get('ranges', []))} "
         f"functions={len(payload.get('functions', []))} "
         f"blocks={len(payload.get('basic_blocks', []))} "
+        f"xrefs={len(payload.get('xrefs', []))} "
         f"instructions={len(payload.get('instructions', []))}"
     )
     for item in payload.get("functions", [])[:32]:

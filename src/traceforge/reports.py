@@ -457,6 +457,7 @@ def _code_html(code_info: dict) -> str:
                 ("ranges", len(code_info.get("ranges", []))),
                 ("functions", len(code_info.get("functions", []))),
                 ("basic blocks", len(code_info.get("basic_blocks", []))),
+                ("xrefs", len(code_info.get("xrefs", []))),
                 ("instructions", len(code_info.get("instructions", []))),
                 ("edges", len(code_info.get("edges", []))),
                 ("entry address", _hex_or_empty(entry.get("address"))),
@@ -516,6 +517,25 @@ def _code_html(code_info: dict) -> str:
                         ", ".join(_hex_or_empty(value) for value in item.get("outgoing", [])),
                     )
                     for item in blocks[:128]
+                ],
+            )
+        )
+    xrefs = code_info.get("xrefs", [])
+    if xrefs:
+        parts.append("<h3>Code xrefs</h3>")
+        parts.append(
+            _table(
+                ("kind", "source", "source function", "target", "target kind", "target name"),
+                [
+                    (
+                        item.get("kind", ""),
+                        _hex_or_empty(item.get("source")),
+                        item.get("source_function", ""),
+                        _hex_or_empty(item.get("target")),
+                        item.get("target_kind", ""),
+                        item.get("target_name", ""),
+                    )
+                    for item in xrefs[:128]
                 ],
             )
         )

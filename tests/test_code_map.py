@@ -4,7 +4,7 @@ import json
 import struct
 
 from traceforge import cli, core
-from traceforge.code_map import inspect_code, write_blocks_csv, write_code_csv
+from traceforge.code_map import inspect_code, write_blocks_csv, write_code_csv, write_xrefs_csv
 
 
 def build_pe_with_call() -> bytes:
@@ -53,6 +53,10 @@ def test_inspect_code_maps_pe_entry_and_call_target():
     assert {item["address"] for item in result["functions"]} >= {0x140001000, 0x140001008}
     assert {item["address"] for item in result["basic_blocks"]} >= {0x140001000, 0x140001008}
     assert result["edges"][0]["kind"] == "call"
+    assert result["xrefs"][0]["source_function"] == "entry"
+    assert result["xrefs"][0]["target_kind"] == "function"
+    assert result["xrefs"][0]["target_name"] == "sub_140001008"
+    assert result["edges"][0]["target_name"] == "sub_140001008"
 
 
 def test_write_code_csv(tmp_path):
@@ -77,12 +81,24 @@ def test_write_blocks_csv(tmp_path):
     assert "ret" in text
 
 
+def test_write_xrefs_csv(tmp_path):
+    result = inspect_code(build_pe_with_call(), "sample.exe", decoder="builtin")
+    output = tmp_path / "xrefs.csv"
+
+    write_xrefs_csv(output, result)
+
+    text = output.read_text(encoding="utf-8")
+    assert "entry" in text
+    assert "sub_140001008" in text
+
+
 def test_code_command_json_and_csv(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     sample = tmp_path / "sample.exe"
     sample.write_bytes(build_pe_with_call())
     csv_path = tmp_path / "code.csv"
     blocks_path = tmp_path / "blocks.csv"
+    xrefs_path = tmp_path / "xrefs.csv"
 
     assert (
         cli.main(
@@ -96,6 +112,8 @@ def test_code_command_json_and_csv(tmp_path, monkeypatch, capsys):
                 str(csv_path),
                 "--blocks-csv",
                 str(blocks_path),
+                "--xrefs-csv",
+                str(xrefs_path),
             ]
         )
         == 0
@@ -104,8 +122,10 @@ def test_code_command_json_and_csv(tmp_path, monkeypatch, capsys):
     payload = json.loads(out[out.index("{") :])
     assert payload["architecture"] == "x86_64"
     assert payload["decoder"]["engine"] == "builtin"
+    assert payload["xrefs"][0]["target_name"] == "sub_140001008"
     assert csv_path.is_file()
     assert blocks_path.is_file()
+    assert xrefs_path.is_file()
 
 
 def test_scan_embeds_code_map_in_case_outputs(tmp_path):
@@ -120,5 +140,9 @@ def test_scan_embeds_code_map_in_case_outputs(tmp_path):
     assert report["extraction"]["code"]["architecture"] == "x86_64"
     assert "call" in (case_dir / "code.csv").read_text(encoding="utf-8")
     assert "0x140001000" in (case_dir / "blocks.csv").read_text(encoding="utf-8")
-    assert {"code_range", "function", "basic_block"} <= {node["type"] for node in graph["nodes"]}
+    assert "sub_140001008" in (case_dir / "xrefs.csv").read_text(encoding="utf-8")
+    assert {"code_range", "function", "basic_block", "code_xref"} <= {
+        node["type"] for node in graph["nodes"]
+    }
     assert "Code Map" in html
+    assert "Code xrefs" in html

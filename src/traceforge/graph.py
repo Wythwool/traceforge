@@ -2,7 +2,7 @@
 
 Node types: sample, format, section, import, export, symbol, resource,
 debug_info, tls_callback, certificate, code_range, function, basic_block,
-chunk, string, indicator, rule_match, embedded_artifact, finding.
+code_xref, chunk, string, indicator, rule_match, embedded_artifact, finding.
 Edge types: contains, references, has_indicator, has_finding, has_format,
 has_rule, imports, exports, defines, calls, branches, embeds.
 """
@@ -15,6 +15,7 @@ MAX_GRAPH_EXPORTS = 256
 MAX_GRAPH_SYMBOLS = 256
 MAX_GRAPH_FUNCTIONS = 256
 MAX_GRAPH_BASIC_BLOCKS = 512
+MAX_GRAPH_XREFS = 512
 MAX_GRAPH_CODE_RANGES = 128
 MAX_GRAPH_SECTIONS = 256
 MAX_GRAPH_RESOURCES = 256
@@ -35,6 +36,7 @@ NODE_TYPES = (
     "code_range",
     "function",
     "basic_block",
+    "code_xref",
     "chunk",
     "string",
     "indicator",
@@ -420,6 +422,28 @@ def _add_code_nodes(
             target_id = block_nodes.get(target)
             if target_id:
                 edges.append({"source": source_id, "target": target_id, "type": "branches"})
+
+    for index, item in enumerate(code.get("xrefs", [])[:MAX_GRAPH_XREFS]):
+        source = item.get("source")
+        target = item.get("target")
+        if not isinstance(source, int) or not isinstance(target, int):
+            continue
+        node_id = f"code_xref:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "code_xref",
+                "label": _short(f"{item.get('kind', 'xref')} 0x{source:x} -> 0x{target:x}"),
+                "kind": item.get("kind", ""),
+                "source": source,
+                "source_function": item.get("source_function", ""),
+                "target": target,
+                "target_kind": item.get("target_kind", ""),
+                "target_name": item.get("target_name", ""),
+                "target_range": item.get("target_range", ""),
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "references"})
 
     function_starts = sorted(function_nodes)
     for item in code.get("edges", []):

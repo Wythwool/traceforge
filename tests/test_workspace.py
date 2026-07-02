@@ -31,6 +31,7 @@ def test_build_case_index_summarizes_cases(tmp_path):
     assert all("code_range_count" in case for case in index["cases"])
     assert all("function_count" in case for case in index["cases"])
     assert all("basic_block_count" in case for case in index["cases"])
+    assert all("xref_count" in case for case in index["cases"])
     assert all("code_edge_count" in case for case in index["cases"])
 
 
@@ -55,6 +56,7 @@ def test_diff_cases_reports_added_and_removed_values(tmp_path):
     assert "debug_info" in diff
     assert "functions" in diff
     assert "basic_blocks" in diff
+    assert "xrefs" in diff
     assert "code_edges" in diff
     assert "certificates" in diff
     assert diff["rule_matches"]["common_count"] >= 1

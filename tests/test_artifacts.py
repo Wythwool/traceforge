@@ -134,6 +134,20 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                         "outgoing": [],
                     }
                 ],
+                "xrefs": [
+                    {
+                        "kind": "call",
+                        "source": 4096,
+                        "source_offset": 512,
+                        "source_function": "entry",
+                        "mnemonic": "call",
+                        "target": 4100,
+                        "target_kind": "function",
+                        "target_name": "sub_1004",
+                        "target_range": ".text",
+                        "target_offset": 516,
+                    }
+                ],
                 "instructions": [
                     {
                         "range": ".text",
@@ -185,6 +199,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "symbols.csv",
         "code.csv",
         "blocks.csv",
+        "xrefs.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
@@ -196,6 +211,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
+    assert "sub_1004" in (tmp_path / "case" / "xrefs.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()

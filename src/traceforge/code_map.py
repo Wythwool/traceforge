@@ -14,6 +14,7 @@ DECODERS = {"auto", "builtin", "capstone"}
 MAX_CODE_RANGES = 128
 MAX_FUNCTIONS = 256
 MAX_BASIC_BLOCKS = 512
+MAX_XREFS = 512
 MAX_INSTRUCTIONS = 512
 MAX_INSTRUCTIONS_PER_RANGE = 96
 MAX_RANGE_BYTES = 4096
@@ -101,6 +102,7 @@ def inspect_code(
     instructions, edges, decoder_info = _decode_ranges(data, ranges, architecture, decoder)
     functions = _function_candidates(format_info, symbol_info, ranges, instructions)
     basic_blocks = _basic_blocks(ranges, instructions, edges)
+    xrefs = _code_xrefs(ranges, functions, instructions, edges)
     return {
         "file_name": filename,
         "format": format_info.get("kind", "raw"),
@@ -110,6 +112,7 @@ def inspect_code(
         "ranges": ranges,
         "functions": functions,
         "basic_blocks": basic_blocks,
+        "xrefs": xrefs,
         "instructions": instructions,
         "edges": edges,
         "truncated": {
@@ -117,6 +120,7 @@ def inspect_code(
             "instructions": len(instructions) >= MAX_INSTRUCTIONS,
             "functions": len(functions) >= MAX_FUNCTIONS,
             "basic_blocks": len(basic_blocks) >= MAX_BASIC_BLOCKS,
+            "xrefs": len(xrefs) >= MAX_XREFS,
         },
     }
 
@@ -168,6 +172,42 @@ def write_blocks_csv(path: Path, payload: dict) -> Path:
                     item.get("instruction_count", ""),
                     item.get("terminator", ""),
                     ";".join(_hex_or_empty(value) for value in item.get("outgoing", [])),
+                ]
+            )
+    return Path(path)
+
+
+def write_xrefs_csv(path: Path, payload: dict) -> Path:
+    """Write code cross-references for spreadsheet review."""
+    with Path(path).open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "kind",
+                "source",
+                "source_offset",
+                "source_function",
+                "mnemonic",
+                "target",
+                "target_kind",
+                "target_name",
+                "target_range",
+                "target_offset",
+            ]
+        )
+        for item in payload.get("xrefs", []):
+            writer.writerow(
+                [
+                    item.get("kind", ""),
+                    _hex_or_empty(item.get("source")),
+                    _hex_or_empty(item.get("source_offset")),
+                    item.get("source_function", ""),
+                    item.get("mnemonic", ""),
+                    _hex_or_empty(item.get("target")),
+                    item.get("target_kind", ""),
+                    item.get("target_name", ""),
+                    item.get("target_range", ""),
+                    _hex_or_empty(item.get("target_offset")),
                 ]
             )
     return Path(path)
@@ -727,6 +767,106 @@ def _ends_block(mnemonic: str) -> bool:
         or mnemonic.startswith("cb")
         or mnemonic.startswith("tb")
     )
+
+
+def _code_xrefs(
+    ranges: list[dict],
+    functions: list[dict],
+    instructions: list[dict],
+    edges: list[dict],
+) -> list[dict]:
+    by_address = {
+        item["address"]: item
+        for item in instructions
+        if isinstance(item.get("address"), int)
+    }
+    function_starts = sorted(
+        item["address"]
+        for item in functions
+        if isinstance(item.get("address"), int)
+    )
+    functions_by_address = {
+        item["address"]: item
+        for item in functions
+        if isinstance(item.get("address"), int)
+    }
+    xrefs = []
+    for index, edge in enumerate(edges[:MAX_XREFS]):
+        source = edge.get("source")
+        target = edge.get("target")
+        if not isinstance(source, int) or not isinstance(target, int):
+            continue
+        instruction = by_address.get(source, {})
+        source_function = _function_name_for_address(source, function_starts, functions_by_address)
+        target_info = _target_info(target, ranges, functions_by_address)
+        xref = {
+            "index": index,
+            "kind": edge.get("kind", ""),
+            "source": source,
+            "source_offset": edge.get("source_offset"),
+            "source_range": edge.get("range", ""),
+            "source_function": source_function,
+            "mnemonic": instruction.get("mnemonic", ""),
+            "operands": instruction.get("operands", ""),
+            "target": target,
+            **target_info,
+        }
+        edge.update(
+            {
+                "source_function": source_function,
+                "target_kind": target_info.get("target_kind", ""),
+                "target_name": target_info.get("target_name", ""),
+                "target_range": target_info.get("target_range", ""),
+                "target_offset": target_info.get("target_offset"),
+            }
+        )
+        xrefs.append(xref)
+    return xrefs
+
+
+def _target_info(
+    target: int,
+    ranges: list[dict],
+    functions_by_address: dict[int, dict],
+) -> dict:
+    resolved = _resolve_address(target, ranges)
+    function = functions_by_address.get(target)
+    if function is not None:
+        return {
+            "target_kind": "function",
+            "target_name": function.get("name", f"sub_{target:x}"),
+            "target_range": resolved.get("range", "") if resolved else "",
+            "target_offset": resolved.get("offset") if resolved else None,
+        }
+    if resolved is not None:
+        return {
+            "target_kind": "code",
+            "target_name": f"{resolved['range']}!0x{target:x}",
+            "target_range": resolved["range"],
+            "target_offset": resolved["offset"],
+        }
+    return {
+        "target_kind": "external",
+        "target_name": "",
+        "target_range": "",
+        "target_offset": None,
+    }
+
+
+def _function_name_for_address(
+    address: int,
+    starts: list[int],
+    functions_by_address: dict[int, dict],
+) -> str:
+    owner = None
+    for start in starts:
+        if start > address:
+            break
+        owner = start
+    if owner is None:
+        return ""
+    function = functions_by_address.get(owner, {})
+    return function.get("name", f"sub_{owner:x}")
 
 
 def _entry_point(format_info: dict, ranges: list[dict]) -> dict:
