@@ -2,11 +2,13 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from traceforge import __version__, core
 from traceforge.carve import carve_file
+from traceforge.search import search_file
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,6 +92,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("carved"),
         help="output directory for carved files",
     )
+
+    search_cmd = sub.add_parser("search", help="search bytes, strings, and regex in one file")
+    search_cmd.add_argument("file", type=Path, help="path to a regular file")
+    search_cmd.add_argument("--text", help="literal text to search as UTF-8 and UTF-16LE")
+    search_cmd.add_argument("--hex", dest="hex_pattern", help="hex bytes, with ?? wildcards")
+    search_cmd.add_argument("--regex", help="regular expression over extracted string runs")
+    search_cmd.add_argument(
+        "-i",
+        "--ignore-case",
+        action="store_true",
+        help="case-insensitive text and regex search",
+    )
+    search_cmd.add_argument(
+        "--context",
+        type=int,
+        default=16,
+        help="bytes of context before and after each match",
+    )
+    search_cmd.add_argument(
+        "--limit",
+        type=int,
+        default=200,
+        help="maximum matches to return",
+    )
+    search_cmd.add_argument("--json", action="store_true", help="print full JSON output")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -221,6 +248,38 @@ def _cmd_carve(path: Path, output: Path) -> int:
     return 0
 
 
+def _cmd_search(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = search_file(
+            args.file,
+            text=args.text,
+            hex_pattern=args.hex_pattern,
+            regex=args.regex,
+            ignore_case=args.ignore_case,
+            context=args.context,
+            limit=args.limit,
+        )
+    except (OSError, ValueError, re.error) as exc:
+        return _fail(f"could not search {args.file}: {exc}")
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    if not payload["matches"]:
+        print("no matches")
+        return 0
+    for match in payload["matches"]:
+        section = f" section={match['section']}" if match["section"] else ""
+        print(
+            f"{match['offset_hex']} {match['type']}{section} "
+            f"size={match['size']} {match['context_ascii']}"
+        )
+    if payload["truncated"]:
+        print(f"matches truncated at {payload['match_count']}")
+    return 0
+
+
 def _cmd_index(cases_root: Path) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
@@ -267,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_rules(args.file, args.rules_path)
     if args.command == "carve":
         return _cmd_carve(args.file, args.output)
+    if args.command == "search":
+        return _cmd_search(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)
