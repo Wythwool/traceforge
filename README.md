@@ -27,6 +27,7 @@ traceforge scan-dir DIR          # scan regular files directly inside DIR
 traceforge scan-dir DIR -r       # scan regular files recursively
 traceforge report CASE_DIR       # rebuild report.html, summary.md, graph.json
 traceforge export CASE_DIR       # rebuild indicators.csv and indicators.json
+traceforge artifacts CASE_DIR    # rebuild strings/chunks/sections/imports/exports CSVs
 traceforge identify FILE         # print format metadata as JSON
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
@@ -63,6 +64,10 @@ Each scan writes:
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
   exports, strings, indicators, rule matches, findings, and embedded artifacts
+- `strings.csv`, `chunks.csv`, `sections.csv`, `imports.csv`, `exports.csv`,
+  and `findings.csv` - table exports for day-to-day case work
+- `hexdump.txt` - bounded source byte view for quick inspection
+- `artifacts.json` - manifest for generated workbench files
 
 `traceforge index` writes `case_index.json` with one compact row per case:
 source file, hash, size, format, score, indicator count, rule match count,
