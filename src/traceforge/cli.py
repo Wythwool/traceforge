@@ -9,6 +9,8 @@ from pathlib import Path
 from traceforge import __version__, core
 from traceforge.carve import carve_file
 from traceforge.search import search_file
+from traceforge.symbols import dumps as dump_symbols
+from traceforge.symbols import inspect_symbols_file, write_symbols_csv
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -117,6 +119,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="maximum matches to return",
     )
     search_cmd.add_argument("--json", action="store_true", help="print full JSON output")
+
+    symbols = sub.add_parser("symbols", help="inspect visible symbols and relocations")
+    symbols.add_argument("file", type=Path, help="path to a regular file")
+    symbols.add_argument("--json", action="store_true", help="print full JSON output")
+    symbols.add_argument("--csv", type=Path, help="write a flat symbol CSV")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -280,6 +287,35 @@ def _cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_symbols(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = inspect_symbols_file(args.file)
+        if args.csv is not None:
+            write_symbols_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except OSError as exc:
+        return _fail(f"could not inspect symbols for {args.file}: {exc}")
+    if args.json:
+        print(dump_symbols(payload), end="")
+        return 0
+    for name, rows in (
+        ("import", payload.get("imports", [])),
+        ("export", payload.get("exports", [])),
+        ("symbol", payload.get("symbols", [])),
+    ):
+        for row in rows:
+            if row.get("name"):
+                print(f"{name} {row['name']} {row.get('kind', '')}".rstrip())
+    for block in payload.get("relocations", []):
+        count = len(block.get("entries", []))
+        print(f"relocations page=0x{block.get('page_rva', 0):x} count={count}")
+    if not any(payload.get(key) for key in ("imports", "exports", "symbols", "relocations")):
+        print("no visible symbols or relocations")
+    return 0
+
+
 def _cmd_index(cases_root: Path) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
@@ -328,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_carve(args.file, args.output)
     if args.command == "search":
         return _cmd_search(args)
+    if args.command == "symbols":
+        return _cmd_symbols(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
     return _cmd_diff(args.left_case_dir, args.right_case_dir, args.output)
