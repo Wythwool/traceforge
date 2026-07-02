@@ -86,6 +86,8 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "section_count": len(details.get("sections", [])),
         "import_count": _count_imports(details),
         "export_count": len(details.get("exports", [])),
+        "symbol_count": len(extraction.get("symbols", {}).get("symbols", [])),
+        "relocation_count": _count_relocations(extraction.get("symbols", {})),
         "embedded_artifact_count": len(fmt.get("embedded", [])),
     }
 
@@ -108,6 +110,10 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     imports = _diff_values(_import_values(left_extraction), _import_values(right_extraction))
     exports = _diff_values(_export_values(left_extraction), _export_values(right_extraction))
     sections = _diff_values(_section_values(left_extraction), _section_values(right_extraction))
+    symbols = _diff_values(_symbol_values(left_extraction), _symbol_values(right_extraction))
+    relocations = _diff_values(
+        _relocation_values(left_extraction), _relocation_values(right_extraction)
+    )
     embedded = _diff_values(
         _embedded_values(left_extraction), _embedded_values(right_extraction)
     )
@@ -125,6 +131,8 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "imports": imports,
         "exports": exports,
         "sections": sections,
+        "symbols": symbols,
+        "relocations": relocations,
         "embedded_artifacts": embedded,
         "strings": _string_delta(left_extraction, right_extraction),
     }
@@ -190,6 +198,14 @@ def render_diff_markdown(diff: dict) -> str:
             "",
             _render_value_counts(diff["sections"]),
             "",
+            "## Symbols",
+            "",
+            _render_value_counts(diff["symbols"]),
+            "",
+            "## Relocations",
+            "",
+            _render_value_counts(diff["relocations"]),
+            "",
         ]
     )
     return "\n".join(lines)
@@ -209,6 +225,13 @@ def _count_imports(details: dict) -> int:
     for item in details.get("imports", []):
         total += 1
         total += len(item.get("symbols", []))
+    return total
+
+
+def _count_relocations(symbol_info: dict) -> int:
+    total = 0
+    for block in symbol_info.get("relocations", []):
+        total += len(block.get("entries", []))
     return total
 
 
@@ -279,6 +302,26 @@ def _section_values(extraction: dict) -> set[str]:
     return values
 
 
+def _symbol_values(extraction: dict) -> set[str]:
+    values = set()
+    for source in ("imports", "exports", "symbols"):
+        for item in extraction.get("symbols", {}).get(source, []):
+            name = item.get("name", "")
+            kind = item.get("kind", item.get("type", ""))
+            if name:
+                values.add(f"{source}:{kind}:{name}".lower())
+    return values
+
+
+def _relocation_values(extraction: dict) -> set[str]:
+    values = set()
+    for block in extraction.get("symbols", {}).get("relocations", []):
+        page = block.get("page_rva", 0)
+        for entry in block.get("entries", []):
+            values.add(f"{page:x}:{entry.get('type', '')}:{entry.get('rva', 0):x}".lower())
+    return values
+
+
 def _embedded_values(extraction: dict) -> set[str]:
     return {
         f"{item.get('kind', '')}@{item.get('offset', '')}"
@@ -321,6 +364,8 @@ def _diff_summary(diff: dict) -> list[str]:
         ("imports", "import"),
         ("exports", "export"),
         ("sections", "section"),
+        ("symbols", "symbol"),
+        ("relocations", "relocation"),
         ("embedded_artifacts", "embedded artifact"),
     ):
         item = diff[key]
