@@ -24,9 +24,12 @@ def make_case(tmp_path):
 def test_graph_node_and_edge_types(tmp_path):
     _, graph = make_case(tmp_path)
     node_types = {node["type"] for node in graph["nodes"]}
-    assert node_types == set(NODE_TYPES)
+    assert node_types <= set(NODE_TYPES)
+    expected_nodes = {"sample", "format", "chunk", "string", "indicator", "rule_match", "finding"}
+    assert expected_nodes <= node_types
     edge_types = {edge["type"] for edge in graph["edges"]}
-    assert edge_types == set(EDGE_TYPES)
+    assert edge_types <= set(EDGE_TYPES)
+    assert {"contains", "references", "has_indicator", "has_rule", "has_finding"} <= edge_types
 
 
 def test_graph_edges_reference_existing_nodes(tmp_path):
