@@ -23,6 +23,7 @@ from traceforge.annotations import (
 from traceforge.artifacts import write_case_artifacts
 from traceforge.capabilities import analyze_capabilities
 from traceforge.code_map import inspect_code
+from traceforge.format_profile import build_format_profile
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
 from traceforge.hunt import write_hunt
@@ -198,6 +199,7 @@ def extract(data: bytes, filename: str = "") -> dict:
     result["format"] = analyze_format(data, filename)
     result["symbols"] = inspect_symbols(data, filename, result["format"])
     result["code"] = inspect_code(data, filename, result["format"], result["symbols"])
+    result["profile"] = build_format_profile(result, filename)
     result["rules"] = evaluate_rules(result)
     result["signatures"] = match_signature_set(
         data,
@@ -515,6 +517,16 @@ def identify_file(path: Path) -> dict:
     """Return format metadata for one file without creating a case folder."""
     path = Path(path)
     return analyze_format(path.read_bytes(), path.name)
+
+
+def profile_file(path: Path) -> dict:
+    """Return an analyst-oriented format profile for one file."""
+    path = Path(path)
+    extraction = extract(path.read_bytes(), path.name)
+    payload = dict(extraction["profile"])
+    payload["file_name"] = path.name
+    payload["size"] = extraction["size"]
+    return payload
 
 
 def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:

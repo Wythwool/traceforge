@@ -29,6 +29,7 @@ CASE_FILES = {
     "xrefs.csv",
     "signature_matches.csv",
     "capabilities.csv",
+    "format_profile.csv",
     "findings.csv",
     "hexdump.txt",
 }
@@ -127,6 +128,9 @@ def test_artifacts_regenerate(tmp_path, monkeypatch):
         "code.csv",
         "blocks.csv",
         "xrefs.csv",
+        "signature_matches.csv",
+        "capabilities.csv",
+        "format_profile.csv",
         "findings.csv",
         "hexdump.txt",
     ):
@@ -145,6 +149,9 @@ def test_artifacts_regenerate(tmp_path, monkeypatch):
         "code.csv",
         "blocks.csv",
         "xrefs.csv",
+        "signature_matches.csv",
+        "capabilities.csv",
+        "format_profile.csv",
         "findings.csv",
         "hexdump.txt",
     ):

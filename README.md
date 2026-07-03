@@ -37,6 +37,8 @@ traceforge artifacts CASE_DIR    # rebuild workbench CSVs and hexdump files
 traceforge view CASE_DIR         # rebuild the self-contained case viewer
 traceforge annotate CASE_DIR --status triage --tag packed --note "Needs import review"
 traceforge identify FILE         # print format metadata as JSON
+traceforge profile FILE          # print compact format profile observations
+traceforge profile FILE --csv format_profile.csv
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
 traceforge signatures FILE       # match built-in local signatures
@@ -100,6 +102,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Code cross-references that link call and branch sources to resolved function
   candidates, PE imported functions through IAT slots, code ranges, and offsets
   when visible
+- Compact format profiles with PE hardening flags, executable/writable section
+  observations, overlays, TLS/debug/certificate signals, ELF segment checks,
+  Mach-O load-command signals, container path checks, and embedded artifact
+  markers
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
@@ -127,8 +133,9 @@ Each scan writes:
   code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`, and `findings.csv`
-  - table exports for day-to-day case work
+  `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`,
+  `format_profile.csv`, and `findings.csv` - table exports for day-to-day case
+  work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -167,11 +174,19 @@ format facts, and signature matches. Scans also write capability results into
 `report.json`, `report.html`, `summary.md`, `capabilities.csv`, and
 `findings.csv`.
 
+`traceforge profile FILE` builds a compact profile from parsed format, symbol,
+and code facts. It highlights format-specific observations such as missing PE
+hardening flags, writable executable ranges, TLS callbacks, overlays, ELF stack
+or segment permissions, Mach-O signing commands, unsafe archive paths, and
+embedded format markers. Scans also write profile results into `report.json`,
+`report.html`, `summary.md`, `format_profile.csv`, and `findings.csv`.
+
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
-`extract_manifest.json`, `bundle_manifest.json`, capability output, external
-rule sets, and external signature sets. These schemas are intended for pipeline
-validation, typed clients, and long-lived case archives.
+`extract_manifest.json`, `bundle_manifest.json`, capability output, format
+profile output, external rule sets, and external signature sets. These schemas
+are intended for pipeline validation, typed clients, and long-lived case
+archives.
 
 `traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
 for one stored case. The bundle contains a `bundle_manifest.json` with every

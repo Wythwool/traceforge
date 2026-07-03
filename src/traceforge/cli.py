@@ -13,6 +13,8 @@ from traceforge.capabilities import write_capabilities_csv
 from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
 from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv, write_xrefs_csv
+from traceforge.format_profile import dumps as dump_profile
+from traceforge.format_profile import write_profile_csv
 from traceforge.search import search_file
 from traceforge.signatures import dumps as dump_signatures
 from traceforge.signatures import write_signature_csv
@@ -111,6 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     identify = sub.add_parser("identify", help="print format metadata for one file")
     identify.add_argument("file", type=Path, help="path to a regular file")
+
+    profile = sub.add_parser("profile", help="print a compact format profile for one file")
+    profile.add_argument("file", type=Path, help="path to a regular file")
+    profile.add_argument("--json", action="store_true", help="print full JSON output")
+    profile.add_argument("--csv", type=Path, help="write profile observation CSV")
 
     rules = sub.add_parser("rules", help="evaluate local rules for one file")
     rules.add_argument("file", type=Path, help="path to a regular file")
@@ -495,6 +502,39 @@ def _cmd_identify(path: Path) -> int:
     except OSError as exc:
         return _fail(f"could not identify {path}: {exc}")
     print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _cmd_profile(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = core.profile_file(args.file)
+        if args.csv is not None:
+            write_profile_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except OSError as exc:
+        return _fail(f"could not profile {args.file}: {exc}")
+    if args.json:
+        print(dump_profile(payload), end="")
+        return 0
+    summary = payload.get("summary", {})
+    print(
+        f"{payload.get('format', 'raw')} "
+        f"level={payload.get('highest_level', 'info')} "
+        f"sections={summary.get('section_count', 0)} "
+        f"imports={summary.get('import_count', 0)} "
+        f"exports={summary.get('export_count', 0)}"
+    )
+    observations = payload.get("observations", [])
+    if not observations:
+        print("no profile observations")
+        return 0
+    for item in observations[:32]:
+        print(
+            f"{item.get('level', 'info')} {item.get('id', '')}: "
+            f"{item.get('detail', '')}"
+        )
     return 0
 
 
@@ -919,6 +959,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_annotate(args)
     if args.command == "identify":
         return _cmd_identify(args.file)
+    if args.command == "profile":
+        return _cmd_profile(args)
     if args.command == "rules":
         return _cmd_rules(args.file, args.rules_path)
     if args.command == "signatures":

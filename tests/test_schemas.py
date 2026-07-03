@@ -9,6 +9,7 @@ EXPECTED_SCHEMAS = {
     "case-bundle",
     "case-index",
     "extract-manifest",
+    "format-profile",
     "hunt",
     "report",
     "ruleset",

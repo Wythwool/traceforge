@@ -161,6 +161,17 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                 ],
                 "edges": [],
             },
+            "profile": {
+                "observations": [
+                    {
+                        "id": "pe.tls-callbacks",
+                        "level": "medium",
+                        "title": "TLS callbacks",
+                        "detail": "TLS callback table is present",
+                        "evidence": "1",
+                    }
+                ]
+            },
             "rules": {
                 "matches": [
                     {
@@ -200,6 +211,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "code.csv",
         "blocks.csv",
         "xrefs.csv",
+        "format_profile.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
@@ -212,6 +224,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
     assert "sub_1004" in (tmp_path / "case" / "xrefs.csv").read_text()
+    assert "pe.tls-callbacks" in (tmp_path / "case" / "format_profile.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from traceforge.capabilities import write_capabilities_csv
 from traceforge.code_map import write_blocks_csv, write_code_csv, write_xrefs_csv
+from traceforge.format_profile import write_profile_csv
 
 DEFAULT_HEXDUMP_LIMIT = 8192
 
@@ -38,6 +39,10 @@ def write_case_artifacts(
         write_capabilities_csv(
             target / "capabilities.csv",
             report.get("extraction", {}).get("capabilities", {}),
+        ),
+        write_profile_csv(
+            target / "format_profile.csv",
+            report.get("extraction", {}).get("profile", {}),
         ),
         _write_findings_csv(target / "findings.csv", report),
     ]
@@ -301,6 +306,17 @@ def _write_findings_csv(path: Path, report: dict) -> Path:
                         f"{evidence.get('source', '')}:{evidence.get('value', '')}"
                         for evidence in item.get("evidence", [])[:10]
                     ),
+                ]
+            )
+        for item in report.get("extraction", {}).get("profile", {}).get("observations", []):
+            writer.writerow(
+                [
+                    "profile",
+                    item.get("id", ""),
+                    item.get("level", ""),
+                    item.get("title", ""),
+                    item.get("detail", ""),
+                    item.get("evidence", ""),
                 ]
             )
         for item in _observations(report):

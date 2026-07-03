@@ -57,6 +57,7 @@ def render_report_html(report: dict) -> str:
     chunks = extraction["chunks"]
     strings = extraction["strings"]
     format_info = extraction.get("format", {})
+    profile = extraction.get("profile", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
@@ -92,6 +93,7 @@ def render_report_html(report: dict) -> str:
         f"<p>First bytes (hex): <code>{first_bytes}</code></p>",
         "<h2>Format</h2>",
         _format_html(format_info),
+        _profile_html(profile),
         _symbols_html(extraction.get("symbols", {})),
         _code_html(extraction.get("code", {})),
         "<h2>Score</h2>",
@@ -256,6 +258,7 @@ def render_summary_md(report: dict) -> str:
     score = report["score"]
     counts = Counter(item["type"] for item in extraction["indicators"])
     format_info = extraction.get("format", {})
+    profile = extraction.get("profile", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
@@ -268,6 +271,10 @@ def render_summary_md(report: dict) -> str:
         f"- Size: {extraction['size']} bytes",
         f"- SHA-256: `{extraction['hashes']['sha256']}`",
         f"- Format: {format_info.get('kind', 'raw')}",
+        (
+            f"- Format profile: {profile.get('highest_level', 'info')} "
+            f"({len(profile.get('observations', []))} observations)"
+        ),
         (
             f"- Symbols: {len(extraction.get('symbols', {}).get('symbols', []))} total, "
             f"{len(extraction.get('symbols', {}).get('imports', []))} imports, "
@@ -292,6 +299,15 @@ def render_summary_md(report: dict) -> str:
         lines.extend(
             f"- {reason['signal']} (+{reason['points']}): {reason['detail']}"
             for reason in score["reasons"]
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Format profile"])
+    if profile.get("observations"):
+        lines.extend(
+            f"- {item['id']} ({item['level']}): {item['detail']}"
+            for item in profile["observations"]
         )
     else:
         lines.append("- none")
@@ -416,6 +432,48 @@ def _format_html(format_info: dict) -> str:
                 [(item["kind"], item["offset"], item["magic"]) for item in embedded],
             )
         )
+    return "\n".join(parts)
+
+
+def _profile_html(profile: dict) -> str:
+    if not profile:
+        return ""
+    summary = profile.get("summary", {})
+    parts = ["<h2>Format Profile</h2>"]
+    parts.append(
+        _table(
+            ("field", "value"),
+            [
+                ("highest level", profile.get("highest_level", "info")),
+                ("sections", summary.get("section_count", 0)),
+                ("libraries", summary.get("library_count", 0)),
+                ("imports", summary.get("import_count", 0)),
+                ("exports", summary.get("export_count", 0)),
+                ("resources", summary.get("resource_count", 0)),
+                ("code ranges", summary.get("code_range_count", 0)),
+                ("functions", summary.get("function_count", 0)),
+                ("xrefs", summary.get("xref_count", 0)),
+            ],
+        )
+    )
+    observations = profile.get("observations", [])
+    if observations:
+        parts.append(
+            _table(
+                ("level", "id", "detail", "evidence"),
+                [
+                    (
+                        item.get("level", ""),
+                        item.get("id", ""),
+                        item.get("detail", ""),
+                        item.get("evidence", ""),
+                    )
+                    for item in observations[:128]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No format profile observations.</p>')
     return "\n".join(parts)
 
 
