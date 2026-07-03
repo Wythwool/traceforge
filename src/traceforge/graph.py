@@ -197,6 +197,24 @@ def build_graph(report: dict) -> dict:
         )
         edges.append({"source": sample_id, "target": node_id, "type": "has_finding"})
 
+    for index, item in enumerate(extraction.get("apis", {}).get("families", [])):
+        node_id = f"api_family:{index}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "finding",
+                "label": _short(f"API: {item.get('name', item.get('id', ''))}"),
+                "source": "api",
+                "signal": item.get("id", ""),
+                "level": item.get("confidence", ""),
+                "evidence": [
+                    f"{evidence.get('library', '')}:{evidence.get('name', '')}"
+                    for evidence in item.get("evidence", [])[:16]
+                ],
+            }
+        )
+        edges.append({"source": sample_id, "target": node_id, "type": "has_finding"})
+
     return {
         "directed": True,
         "node_count": len(nodes),

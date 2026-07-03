@@ -6,6 +6,7 @@ import csv
 import json
 from pathlib import Path
 
+from traceforge.api_profile import write_api_profile_csv
 from traceforge.capabilities import write_capabilities_csv
 from traceforge.code_map import write_blocks_csv, write_code_csv, write_xrefs_csv
 from traceforge.format_profile import write_profile_csv
@@ -43,6 +44,10 @@ def write_case_artifacts(
         write_profile_csv(
             target / "format_profile.csv",
             report.get("extraction", {}).get("profile", {}),
+        ),
+        write_api_profile_csv(
+            target / "api_profile.csv",
+            report.get("extraction", {}).get("apis", {}),
         ),
         _write_findings_csv(target / "findings.csv", report),
     ]
@@ -317,6 +322,20 @@ def _write_findings_csv(path: Path, report: dict) -> Path:
                     item.get("title", ""),
                     item.get("detail", ""),
                     item.get("evidence", ""),
+                ]
+            )
+        for item in report.get("extraction", {}).get("apis", {}).get("families", []):
+            writer.writerow(
+                [
+                    "api",
+                    item.get("id", ""),
+                    item.get("confidence", ""),
+                    item.get("name", ""),
+                    item.get("description", ""),
+                    "; ".join(
+                        f"{evidence.get('library', '')}:{evidence.get('name', '')}"
+                        for evidence in item.get("evidence", [])[:10]
+                    ),
                 ]
             )
         for item in _observations(report):

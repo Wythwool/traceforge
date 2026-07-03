@@ -20,6 +20,7 @@ from traceforge.annotations import (
 from traceforge.annotations import (
     load_annotations as load_case_annotations_file,
 )
+from traceforge.api_profile import analyze_api_profile
 from traceforge.artifacts import write_case_artifacts
 from traceforge.capabilities import analyze_capabilities
 from traceforge.code_map import inspect_code
@@ -198,6 +199,7 @@ def extract(data: bytes, filename: str = "") -> dict:
     }
     result["format"] = analyze_format(data, filename)
     result["symbols"] = inspect_symbols(data, filename, result["format"])
+    result["apis"] = analyze_api_profile(result, filename)
     result["code"] = inspect_code(data, filename, result["format"], result["symbols"])
     result["profile"] = build_format_profile(result, filename)
     result["rules"] = evaluate_rules(result)
@@ -524,6 +526,16 @@ def profile_file(path: Path) -> dict:
     path = Path(path)
     extraction = extract(path.read_bytes(), path.name)
     payload = dict(extraction["profile"])
+    payload["file_name"] = path.name
+    payload["size"] = extraction["size"]
+    return payload
+
+
+def api_profile_file(path: Path) -> dict:
+    """Return import and API-family groups for one file."""
+    path = Path(path)
+    extraction = extract(path.read_bytes(), path.name)
+    payload = dict(extraction["apis"])
     payload["file_name"] = path.name
     payload["size"] = extraction["size"]
     return payload

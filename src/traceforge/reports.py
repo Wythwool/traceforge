@@ -58,6 +58,7 @@ def render_report_html(report: dict) -> str:
     strings = extraction["strings"]
     format_info = extraction.get("format", {})
     profile = extraction.get("profile", {})
+    apis = extraction.get("apis", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
@@ -94,6 +95,7 @@ def render_report_html(report: dict) -> str:
         "<h2>Format</h2>",
         _format_html(format_info),
         _profile_html(profile),
+        _api_profile_html(apis),
         _symbols_html(extraction.get("symbols", {})),
         _code_html(extraction.get("code", {})),
         "<h2>Score</h2>",
@@ -259,6 +261,7 @@ def render_summary_md(report: dict) -> str:
     counts = Counter(item["type"] for item in extraction["indicators"])
     format_info = extraction.get("format", {})
     profile = extraction.get("profile", {})
+    apis = extraction.get("apis", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
@@ -274,6 +277,11 @@ def render_summary_md(report: dict) -> str:
         (
             f"- Format profile: {profile.get('highest_level', 'info')} "
             f"({len(profile.get('observations', []))} observations)"
+        ),
+        (
+            f"- API profile: {apis.get('import_count', 0)} imports, "
+            f"{apis.get('library_count', 0)} libraries, "
+            f"{apis.get('family_count', 0)} families"
         ),
         (
             f"- Symbols: {len(extraction.get('symbols', {}).get('symbols', []))} total, "
@@ -308,6 +316,15 @@ def render_summary_md(report: dict) -> str:
         lines.extend(
             f"- {item['id']} ({item['level']}): {item['detail']}"
             for item in profile["observations"]
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## API profile"])
+    if apis.get("families"):
+        lines.extend(
+            f"- {item['id']} ({item['confidence']}): {item['import_count']} imports"
+            for item in apis["families"]
         )
     else:
         lines.append("- none")
@@ -474,6 +491,63 @@ def _profile_html(profile: dict) -> str:
         )
     else:
         parts.append('<p class="note">No format profile observations.</p>')
+    return "\n".join(parts)
+
+
+def _api_profile_html(apis: dict) -> str:
+    if not apis:
+        return ""
+    parts = ["<h2>API Profile</h2>"]
+    parts.append(
+        _table(
+            ("field", "value"),
+            [
+                ("imports", apis.get("import_count", 0)),
+                ("libraries", apis.get("library_count", 0)),
+                ("families", apis.get("family_count", 0)),
+            ],
+        )
+    )
+    families = apis.get("families", [])
+    if families:
+        parts.append(
+            _table(
+                ("id", "confidence", "imports", "libraries", "evidence"),
+                [
+                    (
+                        item.get("id", ""),
+                        item.get("confidence", ""),
+                        item.get("import_count", 0),
+                        ", ".join(item.get("libraries", [])[:8]),
+                        "; ".join(
+                            f"{evidence.get('library', '')}!{evidence.get('name', '')}"
+                            for evidence in item.get("evidence", [])[:8]
+                        ),
+                    )
+                    for item in families[:64]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No API families found.</p>')
+
+    libraries = apis.get("libraries", [])
+    if libraries:
+        parts.append("<h3>Libraries</h3>")
+        parts.append(
+            _table(
+                ("name", "category", "imports", "families"),
+                [
+                    (
+                        item.get("name", ""),
+                        item.get("category", ""),
+                        item.get("import_count", 0),
+                        ", ".join(item.get("families", [])),
+                    )
+                    for item in libraries[:64]
+                ],
+            )
+        )
     return "\n".join(parts)
 
 

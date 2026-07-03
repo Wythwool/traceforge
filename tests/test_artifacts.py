@@ -172,6 +172,36 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                     }
                 ]
             },
+            "apis": {
+                "families": [
+                    {
+                        "id": "filesystem",
+                        "confidence": "low",
+                        "name": "Filesystem",
+                        "description": "File and directory access APIs.",
+                        "evidence": [
+                            {
+                                "library": "KERNEL32.dll",
+                                "name": "CreateFileW",
+                            }
+                        ],
+                    }
+                ],
+                "libraries": [
+                    {
+                        "name": "KERNEL32.dll",
+                        "category": "native-runtime",
+                        "import_count": 1,
+                    }
+                ],
+                "imports": [
+                    {
+                        "library": "KERNEL32.dll",
+                        "name": "CreateFileW",
+                        "families": ["filesystem"],
+                    }
+                ],
+            },
             "rules": {
                 "matches": [
                     {
@@ -212,6 +242,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "blocks.csv",
         "xrefs.csv",
         "format_profile.csv",
+        "api_profile.csv",
         "findings.csv",
         "hexdump.txt",
     } <= names
@@ -225,6 +256,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
     assert "sub_1004" in (tmp_path / "case" / "xrefs.csv").read_text()
     assert "pe.tls-callbacks" in (tmp_path / "case" / "format_profile.csv").read_text()
+    assert "CreateFileW" in (tmp_path / "case" / "api_profile.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()
     assert "rule.network" in (tmp_path / "case" / "findings.csv").read_text()
     assert "00000000" in (tmp_path / "case" / "hexdump.txt").read_text()

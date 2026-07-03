@@ -69,6 +69,7 @@ def test_html_and_summary_render(tmp_path):
     assert "sample.bin" in html_text
     assert "Indicators" in html_text
     assert "Format Profile" in html_text
+    assert "API Profile" in html_text
     assert "Symbols" in html_text
     assert "Code Map" in html_text
     assert "</html>" in html_text
@@ -76,6 +77,7 @@ def test_html_and_summary_render(tmp_path):
     assert summary.startswith("# TraceForge summary: sample.bin")
     assert "Symbols:" in summary
     assert "Format profile:" in summary
+    assert "API profile:" in summary
     assert "Code:" in summary
     assert hashlib.sha256(SAMPLE).hexdigest() in summary
 

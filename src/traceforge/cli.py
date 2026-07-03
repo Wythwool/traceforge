@@ -8,6 +8,8 @@ from pathlib import Path
 
 from traceforge import __version__, core
 from traceforge.annotations import VALID_STATUSES
+from traceforge.api_profile import dumps as dump_api_profile
+from traceforge.api_profile import write_api_profile_csv
 from traceforge.capabilities import dumps as dump_capabilities
 from traceforge.capabilities import write_capabilities_csv
 from traceforge.carve import carve_file
@@ -118,6 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("file", type=Path, help="path to a regular file")
     profile.add_argument("--json", action="store_true", help="print full JSON output")
     profile.add_argument("--csv", type=Path, help="write profile observation CSV")
+
+    apis = sub.add_parser("apis", help="summarize imported API families for one file")
+    apis.add_argument("file", type=Path, help="path to a regular file")
+    apis.add_argument("--json", action="store_true", help="print full JSON output")
+    apis.add_argument("--csv", type=Path, help="write API profile CSV")
 
     rules = sub.add_parser("rules", help="evaluate local rules for one file")
     rules.add_argument("file", type=Path, help="path to a regular file")
@@ -535,6 +542,40 @@ def _cmd_profile(args: argparse.Namespace) -> int:
             f"{item.get('level', 'info')} {item.get('id', '')}: "
             f"{item.get('detail', '')}"
         )
+    return 0
+
+
+def _cmd_apis(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = core.api_profile_file(args.file)
+        if args.csv is not None:
+            write_api_profile_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except OSError as exc:
+        return _fail(f"could not inspect APIs for {args.file}: {exc}")
+    if args.json:
+        print(dump_api_profile(payload), end="")
+        return 0
+    print(
+        f"{payload.get('format', 'raw')} "
+        f"imports={payload.get('import_count', 0)} "
+        f"libraries={payload.get('library_count', 0)} "
+        f"families={payload.get('family_count', 0)}"
+    )
+    if not payload.get("families"):
+        print("no API families")
+        return 0
+    for family in payload["families"][:32]:
+        print(
+            f"{family['id']} {family['confidence']} "
+            f"imports={family['import_count']} {family['name']}"
+        )
+        for evidence in family.get("evidence", [])[:3]:
+            library = evidence.get("library", "")
+            prefix = f"{library}!" if library else ""
+            print(f"  {prefix}{evidence.get('name', '')}")
     return 0
 
 
@@ -961,6 +1002,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_identify(args.file)
     if args.command == "profile":
         return _cmd_profile(args)
+    if args.command == "apis":
+        return _cmd_apis(args)
     if args.command == "rules":
         return _cmd_rules(args.file, args.rules_path)
     if args.command == "signatures":

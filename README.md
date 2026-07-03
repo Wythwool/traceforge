@@ -39,6 +39,8 @@ traceforge annotate CASE_DIR --status triage --tag packed --note "Needs import r
 traceforge identify FILE         # print format metadata as JSON
 traceforge profile FILE          # print compact format profile observations
 traceforge profile FILE --csv format_profile.csv
+traceforge apis FILE             # summarize imported API families
+traceforge apis FILE --csv api_profile.csv
 traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
 traceforge signatures FILE       # match built-in local signatures
@@ -96,6 +98,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Search results with file offsets, match context, and section names when known
 - Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, and PE
   base relocation blocks
+- Normalized API import profiles with library categories and API-family groups
+  for network, filesystem, registry, process/thread, memory loading,
+  cryptography, compression, services, diagnostics, system information,
+  synchronization, and UI calls
 - Static executable code ranges, entry point mapping, function candidates, basic
   blocks, call/branch edges, and bounded instruction previews for common native
   code
@@ -134,8 +140,8 @@ Each scan writes:
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
   `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`,
-  `format_profile.csv`, and `findings.csv` - table exports for day-to-day case
-  work
+  `format_profile.csv`, `api_profile.csv`, and `findings.csv` - table exports
+  for day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -181,12 +187,19 @@ or segment permissions, Mach-O signing commands, unsafe archive paths, and
 embedded format markers. Scans also write profile results into `report.json`,
 `report.html`, `summary.md`, `format_profile.csv`, and `findings.csv`.
 
+`traceforge apis FILE` normalizes parsed imports into library and API-family
+summaries. It groups imports by common analyst categories such as network,
+filesystem, registry, process/thread, memory loading, cryptography, services,
+diagnostics, system information, synchronization, and UI usage. Scans also write
+API profile results into `report.json`, `report.html`, `summary.md`,
+`api_profile.csv`, and `findings.csv`.
+
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
 `extract_manifest.json`, `bundle_manifest.json`, capability output, format
-profile output, external rule sets, and external signature sets. These schemas
-are intended for pipeline validation, typed clients, and long-lived case
-archives.
+profile output, API profile output, external rule sets, and external signature
+sets. These schemas are intended for pipeline validation, typed clients, and
+long-lived case archives.
 
 `traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
 for one stored case. The bundle contains a `bundle_manifest.json` with every
