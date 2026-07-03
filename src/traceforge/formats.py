@@ -23,6 +23,9 @@ MAX_PE_DEBUG_ENTRIES = 64
 MAX_PE_TLS_CALLBACKS = 64
 MAX_PE_CERTIFICATES = 32
 MAX_PE_RESOURCE_STRINGS = 64
+MAX_PE_EXCEPTIONS = 512
+MAX_PE_DELAY_IMPORTS = 128
+MAX_PE_CLR_STREAMS = 32
 
 PE_MACHINES = {
     0x014C: "i386",
@@ -108,6 +111,31 @@ PE_DLL_CHARACTERISTIC_FLAGS = {
     0x1000: "appcontainer",
     0x4000: "guard_cf",
     0x8000: "terminal_server_aware",
+}
+
+PE_GUARD_FLAGS = {
+    0x00000100: "cf_instrumented",
+    0x00000200: "cfw_instrumented",
+    0x00000400: "cf_function_table_present",
+    0x00000800: "security_cookie_unused",
+    0x00001000: "protect_delayload_iat",
+    0x00002000: "delayload_iat_in_own_section",
+    0x00004000: "cf_export_suppression_info_present",
+    0x00008000: "cf_enable_export_suppression",
+    0x00010000: "cf_longjump_table_present",
+    0x00020000: "rf_instrumented",
+    0x00040000: "rf_enable",
+    0x00080000: "rf_strict",
+    0x00100000: "retpoline_present",
+    0x00400000: "eh_continuation_table_present",
+}
+
+PE_CLR_FLAGS = {
+    0x00000001: "ilonly",
+    0x00000002: "32bit_required",
+    0x00000008: "strong_name_signed",
+    0x00000010: "native_entry_point",
+    0x00100000: "32bit_preferred",
 }
 
 ELF_MACHINES = {
@@ -342,8 +370,25 @@ def parse_pe(data: bytes) -> dict:
     debug = _parse_pe_debug(data, sections, directories.get("debug"))
     tls = _parse_pe_tls(data, sections, directories.get("tls"), is_pe64, image_base)
     certificates = _parse_pe_certificates(data, directories.get("certificate"))
+    exceptions = _parse_pe_exceptions(data, sections, directories.get("exception"))
+    load_config = _parse_pe_load_config(
+        data, sections, directories.get("load_config"), is_pe64, image_base
+    )
+    delay_imports = _parse_pe_delay_imports(
+        data, sections, directories.get("delay_import"), is_pe64, image_base
+    )
+    clr = _parse_pe_clr(data, sections, directories.get("clr_runtime"))
     observations = _pe_observations(
-        sections, entry_section, imports, directories, tls, certificates
+        sections,
+        entry_section,
+        imports,
+        directories,
+        tls,
+        certificates,
+        exceptions,
+        load_config,
+        delay_imports,
+        clr,
     )
     return {
         "format": "pe32+" if is_pe64 else "pe32",
@@ -370,6 +415,10 @@ def parse_pe(data: bytes) -> dict:
         "debug": debug,
         "tls": tls,
         "certificates": certificates,
+        "exceptions": exceptions,
+        "load_config": load_config,
+        "delay_imports": delay_imports,
+        "clr": clr,
         "overlay": _pe_overlay(data, sections),
         "observations": observations,
     }
@@ -963,10 +1012,363 @@ def _parse_pe_certificates(data: bytes, directory: dict | None) -> list[dict]:
     return certificates
 
 
+def _parse_pe_exceptions(
+    data: bytes,
+    sections: list[dict],
+    directory: dict | None,
+) -> dict:
+    if not directory or not directory.get("rva") or not directory.get("size"):
+        return {"count": 0, "entries": []}
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None:
+        return {"count": 0, "entries": []}
+    count = min(directory["size"] // 12, MAX_PE_EXCEPTIONS)
+    entries = []
+    for index in range(count):
+        item = offset + index * 12
+        if item + 12 > len(data):
+            break
+        begin, end, unwind = struct.unpack_from("<III", data, item)
+        if begin == 0 and end == 0 and unwind == 0:
+            continue
+        entries.append(
+            {
+                "index": index,
+                "begin_rva": begin,
+                "end_rva": end,
+                "unwind_info_rva": unwind,
+                "begin_section": (
+                    section.get("name", "")
+                    if (section := _section_for_rva(sections, begin)) is not None
+                    else ""
+                ),
+            }
+        )
+    return {
+        "count": len(entries),
+        "entries": entries,
+        "truncated": directory["size"] // 12 > len(entries),
+    }
+
+
+def _parse_pe_load_config(
+    data: bytes,
+    sections: list[dict],
+    directory: dict | None,
+    is_pe64: bool,
+    image_base: int,
+) -> dict:
+    if not directory or not directory.get("rva") or not directory.get("size"):
+        return {}
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None or offset + 4 > len(data):
+        return {}
+    size = min(_u32(data, offset, "<") or directory.get("size", 0), directory.get("size", 0))
+    if size <= 0:
+        size = min(directory.get("size", 0), len(data) - offset)
+    limit = min(offset + size, len(data))
+    read_word = 8 if is_pe64 else 4
+
+    def read_value(relative: int, width: int = 4) -> int | None:
+        if relative < 0 or offset + relative + width > limit:
+            return None
+        if width == 8:
+            return _u64(data, offset + relative, "<")
+        if width == 4:
+            return _u32(data, offset + relative, "<")
+        if width == 2:
+            return _u16(data, offset + relative, "<")
+        return None
+
+    guard_flags = read_value(144 if is_pe64 else 88, 4)
+    security_cookie = read_value(88 if is_pe64 else 60, read_word)
+    se_handler_table = read_value(96 if is_pe64 else 64, read_word)
+    se_handler_count = read_value(104 if is_pe64 else 68, read_word)
+    guard_check = read_value(112 if is_pe64 else 72, read_word)
+    guard_dispatch = read_value(120 if is_pe64 else 76, read_word)
+    guard_table = read_value(128 if is_pe64 else 80, read_word)
+    guard_count = read_value(136 if is_pe64 else 84, read_word)
+    dependent_load_flags = read_value(78 if is_pe64 else 54, 2)
+
+    payload = {
+        "rva": directory.get("rva", 0),
+        "offset": offset,
+        "size": size,
+        "timestamp": read_value(4, 4),
+        "version": f"{read_value(8, 2) or 0}.{read_value(10, 2) or 0}",
+        "global_flags_clear": _hex_or_empty(read_value(12, 4)),
+        "global_flags_set": _hex_or_empty(read_value(16, 4)),
+        "process_heap_flags": _hex_or_empty(read_value(72 if is_pe64 else 44, 4)),
+        "dependent_load_flags": _hex_or_empty(dependent_load_flags),
+        "security_cookie": _va_record(security_cookie, sections, image_base),
+        "se_handler_table": _va_record(se_handler_table, sections, image_base),
+        "se_handler_count": se_handler_count or 0,
+        "guard_cf_check_function": _va_record(guard_check, sections, image_base),
+        "guard_cf_dispatch_function": _va_record(guard_dispatch, sections, image_base),
+        "guard_cf_function_table": _va_record(guard_table, sections, image_base),
+        "guard_cf_function_count": guard_count or 0,
+        "guard_flags": _hex_or_empty(guard_flags),
+        "guard_flag_names": _flag_names(guard_flags or 0, PE_GUARD_FLAGS),
+    }
+    return {key: value for key, value in payload.items() if value not in ({}, None)}
+
+
+def _parse_pe_delay_imports(
+    data: bytes,
+    sections: list[dict],
+    directory: dict | None,
+    is_pe64: bool,
+    image_base: int,
+) -> list[dict]:
+    if not directory or not directory.get("rva"):
+        return []
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None:
+        return []
+    imports = []
+    for index in range(MAX_PE_DELAY_IMPORTS):
+        descriptor = offset + index * 32
+        if descriptor + 32 > len(data):
+            break
+        (
+            attributes,
+            name_value,
+            module_handle,
+            iat_value,
+            name_table_value,
+            bound_iat,
+            unload_iat,
+            timestamp,
+        ) = struct.unpack_from("<IIIIIIII", data, descriptor)
+        if not any(
+            (
+                attributes,
+                name_value,
+                module_handle,
+                iat_value,
+                name_table_value,
+                bound_iat,
+                unload_iat,
+                timestamp,
+            )
+        ):
+            break
+        name_rva = _delay_rva(name_value, attributes, image_base)
+        iat_rva = _delay_rva(iat_value, attributes, image_base)
+        name_table_rva = _delay_rva(name_table_value, attributes, image_base)
+        dll_name = _read_pe_string(data, sections, name_rva) or f"delay_dll_{index}"
+        symbols = _parse_pe_thunk_symbols(
+            data,
+            sections,
+            name_table_rva or iat_rva,
+            iat_rva,
+            is_pe64,
+            image_base,
+        )
+        imports.append(
+            {
+                "library": dll_name,
+                "attributes": _hex_or_empty(attributes),
+                "name_rva": name_rva,
+                "module_handle_rva": _delay_rva(module_handle, attributes, image_base),
+                "iat_rva": iat_rva,
+                "name_table_rva": name_table_rva,
+                "bound_iat_rva": _delay_rva(bound_iat, attributes, image_base),
+                "unload_iat_rva": _delay_rva(unload_iat, attributes, image_base),
+                "timestamp": timestamp,
+                "symbols": symbols,
+            }
+        )
+    return imports
+
+
+def _parse_pe_clr(data: bytes, sections: list[dict], directory: dict | None) -> dict:
+    if not directory or not directory.get("rva") or not directory.get("size"):
+        return {}
+    offset = _rva_to_offset(sections, directory["rva"])
+    if offset is None or offset + 24 > len(data):
+        return {}
+    size = min(_u32(data, offset, "<") or directory.get("size", 0), directory.get("size", 0))
+    if size <= 0:
+        size = min(directory.get("size", 0), len(data) - offset)
+    if offset + min(size, 24) > len(data):
+        return {}
+    major = _u16(data, offset + 4, "<")
+    minor = _u16(data, offset + 6, "<")
+    metadata_rva = _u32(data, offset + 8, "<")
+    metadata_size = _u32(data, offset + 12, "<")
+    flags = _u32(data, offset + 16, "<")
+    entry = _u32(data, offset + 20, "<")
+    payload = {
+        "rva": directory.get("rva", 0),
+        "offset": offset,
+        "size": size,
+        "runtime_version": f"{major}.{minor}",
+        "metadata": _parse_pe_clr_metadata(data, sections, metadata_rva, metadata_size),
+        "flags": _hex_or_empty(flags),
+        "flag_names": _flag_names(flags, PE_CLR_FLAGS),
+        "entry_point_token": _hex_or_empty(entry),
+    }
+    data_directories = (
+        ("resources", 24),
+        ("strong_name_signature", 32),
+        ("code_manager_table", 40),
+        ("vtable_fixups", 48),
+        ("export_address_table_jumps", 56),
+        ("managed_native_header", 64),
+    )
+    for name, relative in data_directories:
+        if offset + relative + 8 <= len(data) and relative + 8 <= size:
+            rva = _u32(data, offset + relative, "<")
+            entry_size = _u32(data, offset + relative + 4, "<")
+            if rva or entry_size:
+                payload[name] = {"rva": rva, "size": entry_size}
+    return payload
+
+
+def _parse_pe_clr_metadata(
+    data: bytes,
+    sections: list[dict],
+    rva: int,
+    size: int,
+) -> dict:
+    offset = _rva_to_offset(sections, rva)
+    if offset is None or offset + 16 > len(data):
+        return {"rva": rva, "size": size, "streams": []}
+    if data[offset:offset + 4] != b"BSJB":
+        return {"rva": rva, "offset": offset, "size": size, "streams": []}
+    major = _u16(data, offset + 4, "<")
+    minor = _u16(data, offset + 6, "<")
+    version_length = _u32(data, offset + 12, "<")
+    version_offset = offset + 16
+    version_end = min(version_offset + version_length, len(data))
+    version = data[version_offset:version_end].rstrip(b"\x00").decode(
+        "utf-8", errors="replace"
+    )
+    stream_offset = version_offset + ((version_length + 3) & ~3)
+    if stream_offset + 4 > len(data):
+        return {
+            "rva": rva,
+            "offset": offset,
+            "size": size,
+            "version": version,
+            "streams": [],
+        }
+    flags = _u16(data, stream_offset, "<")
+    stream_count = _u16(data, stream_offset + 2, "<")
+    cursor = stream_offset + 4
+    streams = []
+    metadata_end = min(offset + size, len(data)) if size else len(data)
+    for index in range(min(stream_count, MAX_PE_CLR_STREAMS)):
+        if cursor + 8 > metadata_end:
+            break
+        stream_rva = _u32(data, cursor, "<")
+        stream_size = _u32(data, cursor + 4, "<")
+        name_start = cursor + 8
+        name_end = data.find(b"\x00", name_start, metadata_end)
+        if name_end < 0:
+            break
+        name = data[name_start:name_end].decode("utf-8", errors="replace")
+        streams.append(
+            {
+                "index": index,
+                "name": name,
+                "offset": stream_rva,
+                "size": stream_size,
+            }
+        )
+        cursor = name_start + ((name_end - name_start + 1 + 3) & ~3)
+    return {
+        "rva": rva,
+        "offset": offset,
+        "size": size,
+        "metadata_version": f"{major}.{minor}",
+        "version": version,
+        "flags": _hex_or_empty(flags),
+        "stream_count": len(streams),
+        "streams": streams,
+    }
+
+
+def _parse_pe_thunk_symbols(
+    data: bytes,
+    sections: list[dict],
+    thunk_rva: int,
+    iat_rva: int,
+    is_pe64: bool,
+    image_base: int,
+) -> list[dict]:
+    thunk_offset = _rva_to_offset(sections, thunk_rva)
+    if thunk_offset is None:
+        return []
+    symbols = []
+    thunk_size = 8 if is_pe64 else 4
+    ordinal_flag = 1 << (63 if is_pe64 else 31)
+    for thunk_index in range(MAX_IMPORTS):
+        item = thunk_offset + thunk_index * thunk_size
+        if item + thunk_size > len(data):
+            break
+        thunk_value = _u64(data, item, "<") if is_pe64 else _u32(data, item, "<")
+        if thunk_value == 0:
+            break
+        symbol_iat_rva = iat_rva + thunk_index * thunk_size
+        if thunk_value & ordinal_flag:
+            ordinal = thunk_value & 0xFFFF
+            symbols.append(
+                {
+                    "name": f"ordinal_{ordinal}",
+                    "ordinal": ordinal,
+                    "iat_rva": symbol_iat_rva,
+                    "iat_address": image_base + symbol_iat_rva,
+                    "thunk_rva": thunk_rva + thunk_index * thunk_size,
+                }
+            )
+            continue
+        name_offset = _rva_to_offset(sections, thunk_value)
+        if name_offset is None or name_offset + 2 >= len(data):
+            continue
+        hint = _u16(data, name_offset, "<")
+        name = _read_c_string(data, name_offset + 2)
+        if name:
+            symbols.append(
+                {
+                    "name": name,
+                    "hint": hint,
+                    "iat_rva": symbol_iat_rva,
+                    "iat_address": image_base + symbol_iat_rva,
+                    "thunk_rva": thunk_rva + thunk_index * thunk_size,
+                }
+            )
+    return symbols
+
+
 def _va_to_offset(sections: list[dict], va: int, image_base: int) -> int | None:
     if va >= image_base:
         return _rva_to_offset(sections, va - image_base)
     return _rva_to_offset(sections, va)
+
+
+def _va_record(value: int | None, sections: list[dict], image_base: int) -> dict:
+    if not isinstance(value, int) or value == 0:
+        return {}
+    rva = value - image_base if value >= image_base else value
+    section = _section_for_rva(sections, rva)
+    record = {
+        "address": value,
+        "rva": rva,
+        "offset": _rva_to_offset(sections, rva),
+    }
+    if section is not None:
+        record["section"] = section.get("name", "")
+    return record
+
+
+def _delay_rva(value: int, attributes: int, image_base: int) -> int:
+    if not value:
+        return 0
+    if attributes & 1:
+        return value
+    return value - image_base if value >= image_base else value
 
 
 def _pe_observations(
@@ -976,6 +1378,10 @@ def _pe_observations(
     directories: dict,
     tls: dict,
     certificates: list[dict],
+    exceptions: dict,
+    load_config: dict,
+    delay_imports: list[dict],
+    clr: dict,
 ) -> list[dict]:
     observations = []
     for section in sections:
@@ -1019,12 +1425,53 @@ def _pe_observations(
                 "evidence": str(len(tls["callbacks"])),
             }
         )
+    if exceptions.get("entries"):
+        observations.append(
+            {
+                "id": "pe_exception_table",
+                "detail": "exception runtime function records are present",
+                "evidence": str(len(exceptions["entries"])),
+            }
+        )
+    if load_config:
+        observations.append(
+            {
+                "id": "pe_load_config",
+                "detail": "load configuration directory is present",
+                "evidence": str(load_config.get("size", "")),
+            }
+        )
+        guard_flags = load_config.get("guard_flag_names", [])
+        if guard_flags:
+            observations.append(
+                {
+                    "id": "pe_guard_flags",
+                    "detail": "load configuration exposes guard flags",
+                    "evidence": ",".join(guard_flags),
+                }
+            )
+    if delay_imports:
+        observations.append(
+            {
+                "id": "pe_delay_imports",
+                "detail": "delay import descriptors are present",
+                "evidence": str(len(delay_imports)),
+            }
+        )
     if directories.get("certificate") and not certificates:
         observations.append(
             {
                 "id": "pe_certificate_directory_unparsed",
                 "detail": "certificate table exists but no certificate records were parsed",
                 "evidence": "certificate",
+            }
+        )
+    if clr:
+        observations.append(
+            {
+                "id": "pe_clr_runtime",
+                "detail": "CLR runtime header is present",
+                "evidence": clr.get("runtime_version", ""),
             }
         )
     return observations
@@ -1476,6 +1923,10 @@ def _pe_overlay(data: bytes, sections: list[dict]) -> dict:
 
 def _flag_names(value: int, names: dict[int, str]) -> list[str]:
     return [name for bit, name in sorted(names.items()) if value & bit]
+
+
+def _hex_or_empty(value: int | None) -> str:
+    return "" if value is None else f"0x{value:x}"
 
 
 def _permissions(readable: bool, writable: bool, executable: bool) -> str:

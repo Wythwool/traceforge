@@ -90,7 +90,9 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Format metadata for PE, ELF, Mach-O, ZIP/APK/JAR, and WebAssembly
 - PE sections with permissions, entropy, hashes, imports with IAT addresses,
   exports, directories, resources, CodeView/PDB debug records, TLS callbacks,
-  Authenticode certificate table records, overlay metadata, entry point,
+  Authenticode certificate table records, exception runtime records, load
+  configuration data, Control Flow Guard flags, delay import descriptors,
+  CLR runtime headers and metadata streams, overlay metadata, entry point,
   subsystem, and observations
 - ELF program headers, sections, permissions, dynamic tags, needed libraries,
   SONAME, RPATH/RUNPATH, relocation sections, and header metadata
@@ -106,7 +108,7 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Normalized API import profiles with library categories and API-family groups
   for network, filesystem, registry, process/thread, memory loading,
   cryptography, compression, services, diagnostics, system information,
-  synchronization, and UI calls
+  synchronization, and UI calls, including PE delay imports when present
 - Static executable code ranges, entry point mapping, function candidates, basic
   blocks, call/branch edges, and bounded instruction previews for common native
   code
@@ -116,9 +118,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Call graph summaries that aggregate function-to-function calls, indirect
   imported function calls, external targets, call sites, and Graphviz DOT output
 - Compact format profiles with PE hardening flags, executable/writable section
-  observations, overlays, TLS/debug/certificate signals, ELF segment checks,
-  Mach-O load-command signals, container path checks, and embedded artifact
-  markers
+  observations, overlays, TLS/debug/certificate signals, exception tables,
+  load configuration and Guard CF metadata, delay imports, CLR metadata, ELF
+  segment checks, Mach-O load-command signals, container path checks, and
+  embedded artifact markers
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
@@ -147,10 +150,10 @@ Each scan writes:
   code xrefs, import call edges, strings, indicators, rule matches, findings,
   and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
-  `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `relocations.csv`, `xrefs.csv`, `callgraph.csv`, `callgraph.dot`,
-  `signature_matches.csv`, `capabilities.csv`, `format_profile.csv`,
-  `api_profile.csv`, and `findings.csv` - table and graph exports for
+  `pe_metadata.csv`, `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`,
+  `blocks.csv`, `relocations.csv`, `xrefs.csv`, `callgraph.csv`,
+  `callgraph.dot`, `signature_matches.csv`, `capabilities.csv`,
+  `format_profile.csv`, `api_profile.csv`, and `findings.csv` - table exports for
   day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
@@ -158,8 +161,9 @@ Each scan writes:
 `traceforge index` writes `case_index.json` with one compact row per case:
 source file, hash, size, format, score, analyst status, tags, note count,
 indicator count, rule match count, string count, PE resource/debug/TLS/certificate
-counts, import/export counts, symbol and relocation counts, code range, function,
-basic-block and edge counts, xref count, and embedded artifact count.
+counts, PE exception/delay-import/Guard-CF/CLR metadata counts, import/export
+counts, symbol and relocation counts, code range, function, basic-block and edge
+counts, xref count, and embedded artifact count.
 
 `traceforge workspace` writes `case_index.json` and `workspace.html`.
 `workspace.html` is a self-contained browser for the cases root, with search,
@@ -227,7 +231,7 @@ does not replace an existing case unless `--overwrite` is provided.
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
 candidates, basic blocks, code xrefs, call graph edges, code edges,
-certificates, embedded artifacts, and string totals.
+certificates, PE metadata, embedded artifacts, and string totals.
 
 `traceforge extract FILE -o extracted` writes parsed byte ranges into an output
 folder. By default it extracts sections or segments, PE resources, and PE

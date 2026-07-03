@@ -102,6 +102,17 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "debug_entry_count": len(details.get("debug", [])),
         "tls_callback_count": len(details.get("tls", {}).get("callbacks", [])),
         "certificate_count": len(details.get("certificates", [])),
+        "exception_count": details.get("exceptions", {}).get(
+            "count", len(details.get("exceptions", {}).get("entries", []))
+        ),
+        "delay_import_count": len(details.get("delay_imports", [])),
+        "delay_import_symbol_count": sum(
+            len(item.get("symbols", [])) for item in details.get("delay_imports", [])
+        ),
+        "guard_flag_count": len(details.get("load_config", {}).get("guard_flag_names", [])),
+        "clr_stream_count": details.get("clr", {})
+        .get("metadata", {})
+        .get("stream_count", len(details.get("clr", {}).get("metadata", {}).get("streams", []))),
         "import_count": _count_imports(details),
         "export_count": len(details.get("exports", [])),
         "symbol_count": len(extraction.get("symbols", {}).get("symbols", [])),
@@ -159,6 +170,9 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
     certificates = _diff_values(
         _certificate_values(left_extraction), _certificate_values(right_extraction)
     )
+    pe_metadata = _diff_values(
+        _pe_metadata_values(left_extraction), _pe_metadata_values(right_extraction)
+    )
     embedded = _diff_values(
         _embedded_values(left_extraction), _embedded_values(right_extraction)
     )
@@ -186,6 +200,7 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "callgraph": callgraph,
         "code_edges": code_edges,
         "certificates": certificates,
+        "pe_metadata": pe_metadata,
         "embedded_artifacts": embedded,
         "strings": _string_delta(left_extraction, right_extraction),
     }
@@ -290,6 +305,10 @@ def render_diff_markdown(diff: dict) -> str:
             "## Certificates",
             "",
             _render_value_counts(diff["certificates"]),
+            "",
+            "## PE Metadata",
+            "",
+            _render_value_counts(diff["pe_metadata"]),
             "",
         ]
     )
@@ -521,6 +540,50 @@ def _certificate_values(extraction: dict) -> set[str]:
     return values
 
 
+def _pe_metadata_values(extraction: dict) -> set[str]:
+    values = set()
+    details = extraction.get("format", {}).get("details", {})
+
+    load_config = details.get("load_config", {})
+    for name in load_config.get("guard_flag_names", []):
+        values.add(f"guard:{name}".lower())
+    for key in (
+        "security_cookie",
+        "guard_cf_check_function",
+        "guard_cf_dispatch_function",
+        "guard_cf_function_table",
+    ):
+        record = load_config.get(key, {})
+        rva = record.get("rva")
+        if isinstance(rva, int):
+            values.add(f"load_config:{key}:{rva:x}".lower())
+
+    for item in details.get("exceptions", {}).get("entries", []):
+        begin = item.get("begin_rva")
+        end = item.get("end_rva")
+        unwind = item.get("unwind_info_rva")
+        if all(isinstance(value, int) for value in (begin, end, unwind)):
+            values.add(f"exception:{begin:x}-{end:x}:{unwind:x}".lower())
+
+    for item in details.get("delay_imports", []):
+        library = item.get("library", "")
+        if library:
+            values.add(f"delay_import:{library}".lower())
+        for symbol in item.get("symbols", []):
+            name = symbol.get("name") or f"ordinal_{symbol.get('ordinal', '')}"
+            values.add(f"delay_import:{library}!{name}".lower())
+
+    clr = details.get("clr", {})
+    if clr:
+        values.add(f"clr:{clr.get('runtime_version', '')}".lower())
+        for name in clr.get("flag_names", []):
+            values.add(f"clr_flag:{name}".lower())
+        for stream in clr.get("metadata", {}).get("streams", []):
+            if stream.get("name"):
+                values.add(f"clr_stream:{stream.get('name')}".lower())
+    return values
+
+
 def _embedded_values(extraction: dict) -> set[str]:
     return {
         f"{item.get('kind', '')}@{item.get('offset', '')}"
@@ -573,6 +636,7 @@ def _diff_summary(diff: dict) -> list[str]:
         ("callgraph", "call graph edge"),
         ("code_edges", "code edge"),
         ("certificates", "certificate"),
+        ("pe_metadata", "PE metadata item"),
         ("embedded_artifacts", "embedded artifact"),
     ):
         item = diff[key]

@@ -65,6 +65,17 @@ def build_format_profile(extraction: dict, filename: str = "") -> dict:
         "resource_count": len(details.get("resources", [])),
         "debug_entry_count": len(details.get("debug", [])),
         "certificate_count": len(details.get("certificates", [])),
+        "exception_count": details.get("exceptions", {}).get(
+            "count", len(details.get("exceptions", {}).get("entries", []))
+        ),
+        "delay_import_count": len(details.get("delay_imports", [])),
+        "delay_import_symbol_count": sum(
+            len(item.get("symbols", [])) for item in details.get("delay_imports", [])
+        ),
+        "guard_flag_count": len(details.get("load_config", {}).get("guard_flag_names", [])),
+        "clr_stream_count": details.get("clr", {})
+        .get("metadata", {})
+        .get("stream_count", len(details.get("clr", {}).get("metadata", {}).get("streams", []))),
         "embedded_count": len(format_info.get("embedded", [])),
         "code_range_count": len(code.get("ranges", [])),
         "function_count": len(code.get("functions", [])),
@@ -204,7 +215,47 @@ def _profile_pe(details: dict, observations: list[dict]) -> None:
             "certificate table records are present",
             str(len(details.get("certificates", []))),
         )
-    if directories.get("delay_import"):
+    if details.get("exceptions", {}).get("entries"):
+        _add(
+            observations,
+            "pe.exception-table",
+            "info",
+            "Exception runtime table",
+            "runtime function records are present",
+            str(len(details.get("exceptions", {}).get("entries", []))),
+        )
+    load_config = details.get("load_config", {})
+    if load_config:
+        _add(
+            observations,
+            "pe.load-config",
+            "info",
+            "Load configuration",
+            "load configuration directory was parsed",
+            str(load_config.get("size", "")),
+        )
+        guard_flags = load_config.get("guard_flag_names", [])
+        if guard_flags:
+            _add(
+                observations,
+                "pe.guard-flags",
+                "info",
+                "Guard flags",
+                "load configuration exposes control-flow guard metadata",
+                ", ".join(guard_flags),
+            )
+    delay_imports = details.get("delay_imports", [])
+    if delay_imports:
+        symbol_count = sum(len(item.get("symbols", [])) for item in delay_imports)
+        _add(
+            observations,
+            "pe.delay-imports",
+            "info",
+            "Delay imports",
+            "delay import descriptors were parsed",
+            f"{len(delay_imports)} libraries, {symbol_count} symbols",
+        )
+    elif directories.get("delay_import"):
         _add(
             observations,
             "pe.delay-imports",
@@ -212,6 +263,16 @@ def _profile_pe(details: dict, observations: list[dict]) -> None:
             "Delay import directory",
             "delay import directory is present",
             "delay_import",
+        )
+    clr = details.get("clr", {})
+    if clr:
+        _add(
+            observations,
+            "pe.clr-runtime",
+            "info",
+            "CLR runtime header",
+            "managed runtime metadata is present",
+            clr.get("runtime_version", ""),
         )
     if _count_imports(imports) == 0 and sections:
         _add(

@@ -76,6 +76,69 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                             "sha256": "def456",
                         }
                     ],
+                    "exceptions": {
+                        "count": 1,
+                        "entries": [
+                            {
+                                "index": 0,
+                                "begin_rva": 4096,
+                                "end_rva": 4112,
+                                "unwind_info_rva": 5120,
+                                "begin_section": ".text",
+                            }
+                        ],
+                    },
+                    "load_config": {
+                        "size": 160,
+                        "guard_flags": "0x500",
+                        "guard_flag_names": [
+                            "cf_instrumented",
+                            "cf_function_table_present",
+                        ],
+                        "security_cookie": {
+                            "address": 5368713232,
+                            "rva": 4112,
+                            "offset": 528,
+                            "section": ".text",
+                        },
+                        "guard_cf_function_table": {
+                            "address": 5368715264,
+                            "rva": 6144,
+                            "offset": 2560,
+                            "section": ".text",
+                        },
+                        "guard_cf_function_count": 2,
+                    },
+                    "delay_imports": [
+                        {
+                            "library": "USER32.dll",
+                            "iat_rva": 5296,
+                            "name_table_rva": 5280,
+                            "symbols": [
+                                {
+                                    "name": "MessageBoxW",
+                                    "iat_rva": 5296,
+                                    "iat_address": 5368714416,
+                                    "thunk_rva": 5280,
+                                }
+                            ],
+                        }
+                    ],
+                    "clr": {
+                        "runtime_version": "2.5",
+                        "flags": "0x9",
+                        "flag_names": ["ilonly", "strong_name_signed"],
+                        "entry_point_token": "0x6000001",
+                        "metadata": {
+                            "metadata_version": "1.1",
+                            "version": "v4.0.30319",
+                            "stream_count": 2,
+                            "streams": [
+                                {"name": "#~", "offset": 64, "size": 32},
+                                {"name": "#Strings", "offset": 96, "size": 24},
+                            ],
+                        },
+                    },
                     "imports": [
                         {
                             "library": "KERNEL32.dll",
@@ -280,6 +343,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "sections.csv",
         "resources.csv",
         "debug.csv",
+        "pe_metadata.csv",
         "imports.csv",
         "exports.csv",
         "symbols.csv",
@@ -301,6 +365,9 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "manifest" in (tmp_path / "case" / "resources.csv").read_text()
     assert "sample.pdb" in (tmp_path / "case" / "debug.csv").read_text()
     assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()
+    assert "cf_instrumented" in (tmp_path / "case" / "pe_metadata.csv").read_text()
+    assert "MessageBoxW" in (tmp_path / "case" / "pe_metadata.csv").read_text()
+    assert "MessageBoxW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
     assert "sub_1004" in (tmp_path / "case" / "xrefs.csv").read_text()

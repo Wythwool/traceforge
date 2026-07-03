@@ -250,6 +250,7 @@ def _add_format_nodes(
 
     symbol_info = extraction.get("symbols", {})
     imports = _flatten_imports(details.get("imports", []))
+    imports.extend(_flatten_imports(details.get("delay_imports", [])))
     imports.extend(_flatten_imports(symbol_info.get("imports", [])))
     imports = _dedupe_values(imports)
     for index, item in enumerate(imports[:MAX_GRAPH_IMPORTS]):

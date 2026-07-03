@@ -266,6 +266,26 @@ def _imports_from_format(details: dict[str, Any]) -> list[dict[str, Any]]:
             )
         elif item.get("name"):
             rows.append(_import_row("", item.get("name", ""), item.get("kind", ""), "", "format"))
+    for item in details.get("delay_imports", []):
+        library = item.get("library", "")
+        symbols = item.get("symbols", [])
+        if not symbols and library:
+            rows.append(_import_row(library, "", "", "", "delay_import"))
+        for symbol in symbols:
+            name = symbol.get("name") or (
+                f"ordinal_{symbol.get('ordinal')}" if symbol.get("ordinal") else ""
+            )
+            row = _import_row(
+                library,
+                name,
+                "delay",
+                symbol.get("ordinal", ""),
+                "delay_import",
+            )
+            row["iat_rva"] = symbol.get("iat_rva")
+            row["iat_address"] = symbol.get("iat_address")
+            row["thunk_rva"] = symbol.get("thunk_rva")
+            rows.append(row)
     return rows
 
 

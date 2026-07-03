@@ -268,6 +268,7 @@ def render_summary_md(report: dict) -> str:
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
     callgraph = extraction.get("callgraph", {})
+    pe_summary = _pe_metadata_summary(format_info.get("details", {}))
 
     lines = [
         f"# TraceForge summary: {manifest['file_name']}",
@@ -302,9 +303,11 @@ def render_summary_md(report: dict) -> str:
             f"{callgraph.get('import_call_count', 0)} import calls"
         ),
         f"- Score: {score['score']}/{score['max_score']} ({score['label']})",
-        "",
-        "## Indicator counts",
     ]
+    if pe_summary:
+        lines.append(f"- PE metadata: {pe_summary}")
+
+    lines.extend(["", "## Indicator counts"])
     if counts:
         lines.extend(f"- {kind}: {counts[kind]}" for kind in sorted(counts))
     else:
@@ -429,6 +432,7 @@ def _format_html(format_info: dict) -> str:
 
     parts.append(_pe_resources_html(details.get("resources", [])))
     parts.append(_pe_debug_html(details))
+    parts.append(_pe_metadata_html(details))
 
     entries = details.get("entries", [])
     if entries:
@@ -475,6 +479,11 @@ def _profile_html(profile: dict) -> str:
                 ("imports", summary.get("import_count", 0)),
                 ("exports", summary.get("export_count", 0)),
                 ("resources", summary.get("resource_count", 0)),
+                ("exceptions", summary.get("exception_count", 0)),
+                ("delay imports", summary.get("delay_import_count", 0)),
+                ("delay import symbols", summary.get("delay_import_symbol_count", 0)),
+                ("guard flags", summary.get("guard_flag_count", 0)),
+                ("CLR streams", summary.get("clr_stream_count", 0)),
                 ("code ranges", summary.get("code_range_count", 0)),
                 ("functions", summary.get("function_count", 0)),
                 ("xrefs", summary.get("xref_count", 0)),
@@ -616,6 +625,93 @@ def _pe_debug_html(details: dict) -> str:
     return "<h3>Debug, TLS and certificates</h3>\n" + _table(
         ("source", "type", "offset", "size", "detail"), rows
     )
+
+
+def _pe_metadata_html(details: dict) -> str:
+    rows = []
+    exceptions = details.get("exceptions", {})
+    load_config = details.get("load_config", {})
+    delay_imports = details.get("delay_imports", [])
+    clr = details.get("clr", {})
+
+    if exceptions:
+        rows.append(("exception records", exceptions.get("count", 0)))
+    if load_config:
+        rows.extend(
+            (
+                ("load config size", load_config.get("size", "")),
+                ("guard flags", ", ".join(load_config.get("guard_flag_names", []))),
+                ("security cookie", _record_address(load_config.get("security_cookie", {}))),
+                (
+                    "guard function table",
+                    _record_address(load_config.get("guard_cf_function_table", {})),
+                ),
+                ("guard function count", load_config.get("guard_cf_function_count", "")),
+            )
+        )
+    if delay_imports:
+        symbol_count = sum(len(item.get("symbols", [])) for item in delay_imports)
+        rows.append(("delay imports", f"{len(delay_imports)} libraries, {symbol_count} symbols"))
+    if clr:
+        metadata = clr.get("metadata", {})
+        rows.extend(
+            (
+                ("CLR runtime", clr.get("runtime_version", "")),
+                ("CLR flags", ", ".join(clr.get("flag_names", []))),
+                ("CLR metadata", metadata.get("version", "")),
+                ("CLR streams", metadata.get("stream_count", 0)),
+            )
+        )
+    if not rows:
+        return ""
+
+    parts = ["<h3>PE metadata</h3>", _table(("field", "value"), rows)]
+
+    exception_rows = [
+        (
+            item.get("index", ""),
+            _hex_or_empty(item.get("begin_rva")),
+            _hex_or_empty(item.get("end_rva")),
+            _hex_or_empty(item.get("unwind_info_rva")),
+            item.get("begin_section", ""),
+        )
+        for item in exceptions.get("entries", [])[:128]
+    ]
+    if exception_rows:
+        parts.append("<h4>Exception records</h4>")
+        parts.append(_table(("index", "begin", "end", "unwind", "section"), exception_rows))
+
+    delay_rows = []
+    for item in delay_imports:
+        symbols = item.get("symbols", [])
+        if not symbols:
+            delay_rows.append((item.get("library", ""), "", "", _hex_or_empty(item.get("iat_rva"))))
+        for symbol in symbols[:128]:
+            delay_rows.append(
+                (
+                    item.get("library", ""),
+                    symbol.get("name", f"ordinal_{symbol.get('ordinal', '')}"),
+                    symbol.get("ordinal", ""),
+                    _hex_or_empty(symbol.get("iat_rva")),
+                )
+            )
+    if delay_rows:
+        parts.append("<h4>Delay imports</h4>")
+        parts.append(_table(("library", "name", "ordinal", "iat rva"), delay_rows[:128]))
+
+    stream_rows = [
+        (
+            item.get("name", ""),
+            _hex_or_empty(item.get("offset")),
+            item.get("size", ""),
+        )
+        for item in clr.get("metadata", {}).get("streams", [])
+    ]
+    if stream_rows:
+        parts.append("<h4>CLR streams</h4>")
+        parts.append(_table(("name", "offset", "size"), stream_rows))
+
+    return "\n".join(parts)
 
 
 def _symbols_html(symbol_info: dict) -> str:
@@ -867,6 +963,35 @@ def _format_import_rows(imports: list) -> list[str]:
 
 def _hex_or_empty(value: int | None) -> str:
     return "" if value is None else f"0x{value:x}"
+
+
+def _record_address(record: dict) -> str:
+    if not record:
+        return ""
+    address = _hex_or_empty(record.get("address"))
+    rva = _hex_or_empty(record.get("rva"))
+    section = record.get("section", "")
+    parts = [part for part in (address, f"rva {rva}" if rva else "", section) if part]
+    return ", ".join(parts)
+
+
+def _pe_metadata_summary(details: dict) -> str:
+    parts = []
+    exceptions = details.get("exceptions", {})
+    if exceptions.get("count"):
+        parts.append(f"{exceptions.get('count')} exception records")
+    if details.get("load_config", {}).get("guard_flag_names"):
+        flags = len(details["load_config"]["guard_flag_names"])
+        parts.append(f"{flags} guard flags")
+    delay_imports = details.get("delay_imports", [])
+    if delay_imports:
+        symbols = sum(len(item.get("symbols", [])) for item in delay_imports)
+        parts.append(f"{len(delay_imports)} delay import libraries/{symbols} symbols")
+    clr = details.get("clr", {})
+    if clr:
+        streams = clr.get("metadata", {}).get("stream_count", 0)
+        parts.append(f"CLR {clr.get('runtime_version', '')} with {streams} streams")
+    return ", ".join(parts)
 
 
 def _format_export_rows(exports: list) -> list[str]:

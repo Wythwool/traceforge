@@ -30,6 +30,11 @@ def test_build_case_index_summarizes_cases(tmp_path):
     assert all("debug_entry_count" in case for case in index["cases"])
     assert all("tls_callback_count" in case for case in index["cases"])
     assert all("certificate_count" in case for case in index["cases"])
+    assert all("exception_count" in case for case in index["cases"])
+    assert all("delay_import_count" in case for case in index["cases"])
+    assert all("delay_import_symbol_count" in case for case in index["cases"])
+    assert all("guard_flag_count" in case for case in index["cases"])
+    assert all("clr_stream_count" in case for case in index["cases"])
     assert all("symbol_count" in case for case in index["cases"])
     assert all("relocation_count" in case for case in index["cases"])
     assert all("code_range_count" in case for case in index["cases"])
@@ -63,6 +68,7 @@ def test_diff_cases_reports_added_and_removed_values(tmp_path):
     assert "xrefs" in diff
     assert "code_edges" in diff
     assert "certificates" in diff
+    assert "pe_metadata" in diff
     assert diff["rule_matches"]["common_count"] >= 1
 
 

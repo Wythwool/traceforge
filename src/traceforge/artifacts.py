@@ -32,6 +32,7 @@ def write_case_artifacts(
         _write_sections_csv(target / "sections.csv", report),
         _write_resources_csv(target / "resources.csv", report),
         _write_debug_csv(target / "debug.csv", report),
+        _write_pe_metadata_csv(target / "pe_metadata.csv", report),
         _write_imports_csv(target / "imports.csv", report),
         _write_exports_csv(target / "exports.csv", report),
         _write_symbols_csv(target / "symbols.csv", report),
@@ -238,6 +239,107 @@ def _write_debug_csv(path: Path, report: dict) -> Path:
     return path
 
 
+def _write_pe_metadata_csv(path: Path, report: dict) -> Path:
+    details = report.get("extraction", {}).get("format", {}).get("details", {})
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["source", "name", "value", "detail"])
+
+        def emit(source: str, name: str, value: object = "", detail: str = "") -> None:
+            writer.writerow([source, name, _cell(value), detail])
+
+        load_config = details.get("load_config", {})
+        if load_config:
+            for key in (
+                "rva",
+                "offset",
+                "size",
+                "timestamp",
+                "version",
+                "global_flags_clear",
+                "global_flags_set",
+                "process_heap_flags",
+                "dependent_load_flags",
+                "guard_flags",
+                "se_handler_count",
+                "guard_cf_function_count",
+            ):
+                if key in load_config:
+                    emit("load_config", key, load_config.get(key, ""))
+            for key in (
+                "security_cookie",
+                "se_handler_table",
+                "guard_cf_check_function",
+                "guard_cf_dispatch_function",
+                "guard_cf_function_table",
+            ):
+                record = load_config.get(key, {})
+                if record:
+                    emit("load_config", key, _address_cell(record), _address_detail(record))
+            for name in load_config.get("guard_flag_names", []):
+                emit("load_config.guard", name, "true")
+
+        exceptions = details.get("exceptions", {})
+        if exceptions:
+            emit(
+                "exceptions",
+                "count",
+                exceptions.get("count", 0),
+                f"truncated={exceptions.get('truncated', False)}",
+            )
+            for item in exceptions.get("entries", []):
+                value = (
+                    f"{_hex_cell(item.get('begin_rva'))}-"
+                    f"{_hex_cell(item.get('end_rva'))}"
+                )
+                detail = (
+                    f"unwind={_hex_cell(item.get('unwind_info_rva'))}; "
+                    f"section={item.get('begin_section', '')}"
+                )
+                emit("exception", f"entry_{item.get('index', '')}", value, detail)
+
+        for item in details.get("delay_imports", []):
+            library = item.get("library", "")
+            emit(
+                "delay_import",
+                library,
+                f"symbols={len(item.get('symbols', []))}",
+                (
+                    f"iat={_hex_cell(item.get('iat_rva'))}; "
+                    f"name_table={_hex_cell(item.get('name_table_rva'))}"
+                ),
+            )
+            for symbol in item.get("symbols", []):
+                name = symbol.get("name") or f"ordinal_{symbol.get('ordinal', '')}"
+                detail = (
+                    f"ordinal={symbol.get('ordinal', '')}; "
+                    f"iat={_hex_cell(symbol.get('iat_rva'))}; "
+                    f"thunk={_hex_cell(symbol.get('thunk_rva'))}"
+                )
+                emit("delay_import.symbol", f"{library}!{name}", name, detail)
+
+        clr = details.get("clr", {})
+        if clr:
+            for key in ("runtime_version", "flags", "entry_point_token"):
+                if key in clr:
+                    emit("clr", key, clr.get(key, ""))
+            for name in clr.get("flag_names", []):
+                emit("clr.flag", name, "true")
+            metadata = clr.get("metadata", {})
+            if metadata:
+                for key in ("metadata_version", "version", "stream_count"):
+                    if key in metadata:
+                        emit("clr.metadata", key, metadata.get(key, ""))
+                for stream in metadata.get("streams", []):
+                    emit(
+                        "clr.stream",
+                        stream.get("name", ""),
+                        stream.get("size", ""),
+                        f"offset={_hex_cell(stream.get('offset'))}",
+                    )
+    return path
+
+
 def _write_imports_csv(path: Path, report: dict) -> Path:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -424,12 +526,12 @@ def _symbol_rows(report: dict, source: str) -> list[dict]:
 
 
 def _import_rows(report: dict) -> list[list[object]]:
-    imports = (
+    details = (
         report.get("extraction", {})
         .get("format", {})
         .get("details", {})
-        .get("imports", [])
     )
+    imports = details.get("imports", [])
     rows = []
     for item in imports:
         if isinstance(item, str):
@@ -461,6 +563,23 @@ def _import_rows(report: dict) -> list[list[object]]:
                     item.get("ordinal", ""),
                     "",
                     "",
+                ]
+            )
+    for item in details.get("delay_imports", []):
+        library = item.get("library", "")
+        symbols = item.get("symbols", [])
+        if not symbols:
+            rows.append([library, "", "", "delay", "", item.get("iat_rva", ""), ""])
+        for symbol in symbols:
+            rows.append(
+                [
+                    library,
+                    "",
+                    symbol.get("name", ""),
+                    "delay",
+                    symbol.get("ordinal", ""),
+                    symbol.get("iat_rva", ""),
+                    symbol.get("iat_address", ""),
                 ]
             )
     return rows
@@ -497,3 +616,26 @@ def _write_json(path: Path, payload: dict) -> Path:
 def _write_text(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def _cell(value: object) -> object:
+    return _hex_cell(value) if isinstance(value, int) else value
+
+
+def _hex_cell(value: object) -> str:
+    return f"0x{value:x}" if isinstance(value, int) else str(value or "")
+
+
+def _address_cell(record: dict) -> str:
+    return _hex_cell(record.get("address"))
+
+
+def _address_detail(record: dict) -> str:
+    parts = []
+    if record.get("rva") is not None:
+        parts.append(f"rva={_hex_cell(record.get('rva'))}")
+    if record.get("offset") is not None:
+        parts.append(f"offset={_hex_cell(record.get('offset'))}")
+    if record.get("section"):
+        parts.append(f"section={record.get('section')}")
+    return "; ".join(parts)
