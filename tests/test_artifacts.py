@@ -76,6 +76,41 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                             "sha256": "def456",
                         }
                     ],
+                    "fingerprints": {
+                        "imphash": "a" * 32,
+                        "delay_imphash": "b" * 32,
+                        "rich_hash": "c" * 32,
+                        "version_info_hash": "d" * 32,
+                    },
+                    "rich_header": {
+                        "xor_key": "0xa5a5a5a5",
+                        "entry_count": 1,
+                        "entries": [
+                            {
+                                "index": 0,
+                                "product_id": 258,
+                                "build_id": 4660,
+                                "count": 5,
+                            }
+                        ],
+                    },
+                    "version_info": [
+                        {
+                            "fixed_file_info": {
+                                "file_version": "1.2.3.4",
+                                "product_version": "5.6.7.8",
+                                "file_type": "0x00000001",
+                                "file_os": "0x00040004",
+                            },
+                            "strings": {
+                                "FileDescription": "TraceForge sample",
+                                "ProductName": "TraceForge Test",
+                            },
+                            "translations": [
+                                {"language": "0x0409", "codepage": "0x04b0"}
+                            ],
+                        }
+                    ],
                     "exceptions": {
                         "count": 1,
                         "entries": [
@@ -367,6 +402,8 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()
     assert "cf_instrumented" in (tmp_path / "case" / "pe_metadata.csv").read_text()
     assert "MessageBoxW" in (tmp_path / "case" / "pe_metadata.csv").read_text()
+    assert "TraceForge sample" in (tmp_path / "case" / "pe_metadata.csv").read_text()
+    assert "rich_header.entry" in (tmp_path / "case" / "pe_metadata.csv").read_text()
     assert "MessageBoxW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()

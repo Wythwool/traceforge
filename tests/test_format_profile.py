@@ -15,13 +15,19 @@ def test_pe_format_profile_highlights_metadata():
     assert profile["engine"] == "traceforge-format-profile"
     assert profile["format"] == "pe"
     assert profile["summary"]["section_count"] == 1
-    assert profile["summary"]["resource_count"] == 1
+    assert profile["summary"]["resource_count"] == 2
     assert profile["summary"]["debug_entry_count"] == 1
     assert profile["summary"]["certificate_count"] == 1
+    assert profile["summary"]["fingerprint_count"] == 3
+    assert profile["summary"]["rich_header_entry_count"] == 2
+    assert profile["summary"]["version_info_count"] == 1
     assert profile["entry_point"]["section"] == ".text"
     assert "pe.tls-callbacks" in identifiers
     assert "pe.debug-records" in identifiers
     assert "pe.certificate-table" in identifiers
+    assert "pe.delay-imphash" in identifiers
+    assert "pe.rich-header" in identifiers
+    assert "pe.version-info" in identifiers
 
 
 def test_profile_cli_writes_json_and_csv(tmp_path, capsys):
@@ -39,7 +45,7 @@ def test_profile_cli_writes_json_and_csv(tmp_path, capsys):
     assert cli.main(["profile", str(sample), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["engine"] == "traceforge-format-profile"
-    assert payload["summary"]["resource_count"] == 1
+    assert payload["summary"]["resource_count"] == 2
 
 
 def test_scan_writes_format_profile_outputs(tmp_path):

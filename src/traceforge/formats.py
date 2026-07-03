@@ -26,6 +26,8 @@ MAX_PE_RESOURCE_STRINGS = 64
 MAX_PE_EXCEPTIONS = 512
 MAX_PE_DELAY_IMPORTS = 128
 MAX_PE_CLR_STREAMS = 32
+MAX_PE_RICH_ENTRIES = 128
+MAX_PE_VERSION_STRINGS = 128
 
 PE_MACHINES = {
     0x014C: "i386",
@@ -339,6 +341,7 @@ def parse_pe(data: bytes) -> dict:
     e_lfanew = _u32(data, 0x3C, "<")
     if e_lfanew + 24 > len(data) or data[e_lfanew : e_lfanew + 4] != b"PE\x00\x00":
         raise AnalysisError("PE signature not found at DOS e_lfanew")
+    rich_header = _parse_pe_rich_header(data, e_lfanew)
 
     coff = e_lfanew + 4
     machine = _u16(data, coff, "<")
@@ -367,6 +370,7 @@ def parse_pe(data: bytes) -> dict:
     imports = _parse_pe_imports(data, sections, directories.get("import"), is_pe64, image_base)
     exports = _parse_pe_exports(data, sections, directories.get("export"))
     resources = _parse_pe_resources(data, sections, directories.get("resource"))
+    version_info = _pe_version_resources(resources)
     debug = _parse_pe_debug(data, sections, directories.get("debug"))
     tls = _parse_pe_tls(data, sections, directories.get("tls"), is_pe64, image_base)
     certificates = _parse_pe_certificates(data, directories.get("certificate"))
@@ -378,6 +382,7 @@ def parse_pe(data: bytes) -> dict:
         data, sections, directories.get("delay_import"), is_pe64, image_base
     )
     clr = _parse_pe_clr(data, sections, directories.get("clr_runtime"))
+    fingerprints = _pe_fingerprints(imports, delay_imports, rich_header, version_info)
     observations = _pe_observations(
         sections,
         entry_section,
@@ -389,6 +394,9 @@ def parse_pe(data: bytes) -> dict:
         load_config,
         delay_imports,
         clr,
+        rich_header,
+        version_info,
+        fingerprints,
     )
     return {
         "format": "pe32+" if is_pe64 else "pe32",
@@ -409,9 +417,12 @@ def parse_pe(data: bytes) -> dict:
         ),
         "directories": directories,
         "sections": sections,
+        "fingerprints": fingerprints,
+        "rich_header": rich_header,
         "imports": imports,
         "exports": exports,
         "resources": resources,
+        "version_info": version_info,
         "debug": debug,
         "tls": tls,
         "certificates": certificates,
@@ -620,6 +631,50 @@ def _parse_pe_sections(data: bytes, offset: int, count: int) -> list[dict]:
     return sections
 
 
+def _parse_pe_rich_header(data: bytes, pe_offset: int) -> dict:
+    rich_offset = data.find(b"Rich", 0, min(pe_offset, len(data)))
+    if rich_offset < 0 or rich_offset + 8 > len(data):
+        return {}
+    key = _u32(data, rich_offset + 4, "<")
+    cursor = rich_offset - 4
+    decoded: list[int] = []
+    dans_offset = None
+    while cursor >= 0x40 and len(decoded) < MAX_PE_RICH_ENTRIES * 2 + 8:
+        value = _u32(data, cursor, "<") ^ key
+        decoded.insert(0, value)
+        if value == 0x536E6144:
+            dans_offset = cursor
+            break
+        cursor -= 4
+    if dans_offset is None or len(decoded) < 4:
+        return {}
+
+    entries = []
+    body = decoded[4:]
+    for index in range(0, len(body) - 1, 2):
+        product_build = body[index]
+        count = body[index + 1]
+        if product_build == 0 and count == 0:
+            continue
+        entries.append(
+            {
+                "index": len(entries),
+                "product_id": product_build >> 16,
+                "build_id": product_build & 0xFFFF,
+                "count": count,
+            }
+        )
+        if len(entries) >= MAX_PE_RICH_ENTRIES:
+            break
+    return {
+        "offset": dans_offset,
+        "rich_offset": rich_offset,
+        "xor_key": f"0x{key:08x}",
+        "entry_count": len(entries),
+        "entries": entries,
+    }
+
+
 def _parse_pe_imports(
     data: bytes,
     sections: list[dict],
@@ -685,6 +740,76 @@ def _parse_pe_imports(
                     )
         imports.append({"library": dll_name, "symbols": symbols})
     return imports
+
+
+def _pe_fingerprints(
+    imports: list[dict],
+    delay_imports: list[dict],
+    rich_header: dict,
+    version_info: list[dict],
+) -> dict:
+    payload = {}
+    imphash = _import_hash(imports)
+    delay_imphash = _import_hash(delay_imports)
+    rich_hash = _rich_hash(rich_header)
+    version_hash = _version_info_hash(version_info)
+    if imphash:
+        payload["imphash"] = imphash
+    if delay_imphash:
+        payload["delay_imphash"] = delay_imphash
+    if rich_hash:
+        payload["rich_hash"] = rich_hash
+    if version_hash:
+        payload["version_info_hash"] = version_hash
+    return payload
+
+
+def _import_hash(imports: list[dict]) -> str:
+    values = []
+    for item in imports:
+        library = _normalize_import_library(item.get("library", ""))
+        if not library:
+            continue
+        for symbol in item.get("symbols", []):
+            name = _normalize_import_name(symbol)
+            if name:
+                values.append(f"{library}.{name}")
+    return _md5(",".join(values).encode("utf-8")) if values else ""
+
+
+def _normalize_import_library(value: str) -> str:
+    name = Path(str(value).replace("\\", "/")).name.lower()
+    for suffix in (".dll", ".ocx", ".sys"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _normalize_import_name(symbol: dict) -> str:
+    if symbol.get("name"):
+        return str(symbol.get("name", "")).strip().lower()
+    if symbol.get("ordinal"):
+        return f"ord{symbol['ordinal']}"
+    return ""
+
+
+def _rich_hash(rich_header: dict) -> str:
+    entries = rich_header.get("entries", [])
+    if not entries:
+        return ""
+    values = [
+        f"{item.get('product_id', 0)}.{item.get('build_id', 0)}.{item.get('count', 0)}"
+        for item in entries
+    ]
+    return _md5(",".join(values).encode("utf-8"))
+
+
+def _version_info_hash(version_info: list[dict]) -> str:
+    pairs = []
+    for item in version_info:
+        for key, value in sorted(item.get("strings", {}).items()):
+            pairs.append(f"{key.lower()}={str(value).lower()}")
+    return _md5("\n".join(pairs).encode("utf-8")) if pairs else ""
 
 
 def _parse_pe_exports(data: bytes, sections: list[dict], directory: dict | None) -> list[dict]:
@@ -823,7 +948,135 @@ def _resource_record(
     strings = _resource_strings(blob)
     if strings:
         item["strings"] = strings
+    if type_item.get("id") == 16 or str(resource_type).lower() == "version":
+        version_info = _parse_pe_version_info(blob)
+        if version_info:
+            item["version_info"] = version_info
     return item
+
+
+def _pe_version_resources(resources: list[dict]) -> list[dict]:
+    rows = []
+    for item in resources:
+        version_info = item.get("version_info")
+        if not version_info:
+            continue
+        row = {
+            "name": item.get("name", ""),
+            "language": item.get("language", ""),
+            "offset": item.get("offset"),
+            "size": item.get("size", 0),
+        }
+        row.update(version_info)
+        rows.append(row)
+    return rows
+
+
+def _parse_pe_version_info(blob: bytes) -> dict:
+    root, _next_offset = _parse_version_node(blob, 0, 0)
+    if not root or root.get("key") != "VS_VERSION_INFO":
+        return {}
+    payload: dict = {}
+    fixed = _parse_fixed_file_info(root.get("value", b""))
+    if fixed:
+        payload["fixed_file_info"] = fixed
+    strings: dict[str, str] = {}
+    translations: list[dict] = []
+    _collect_version_info(root, strings, translations)
+    if strings:
+        payload["strings"] = dict(sorted(strings.items()))
+    if translations:
+        payload["translations"] = translations
+    return payload
+
+
+def _parse_version_node(data: bytes, offset: int, depth: int) -> tuple[dict | None, int]:
+    if depth > 8 or offset + 6 > len(data):
+        return None, offset
+    length, value_length, value_type = struct.unpack_from("<HHH", data, offset)
+    end = min(offset + length, len(data))
+    if length < 6 or end <= offset:
+        return None, offset
+    cursor = offset + 6
+    chars = []
+    while cursor + 2 <= end:
+        char = _u16(data, cursor, "<")
+        cursor += 2
+        if char == 0:
+            break
+        chars.append(chr(char))
+    key = "".join(chars)
+    cursor = _align4(cursor)
+    value_size = value_length * 2 if value_type == 1 else value_length
+    value = data[cursor : min(cursor + value_size, end)] if value_size else b""
+    cursor = _align4(cursor + value_size)
+
+    children = []
+    while cursor + 6 <= end:
+        child, next_cursor = _parse_version_node(data, cursor, depth + 1)
+        if child is None or next_cursor <= cursor:
+            break
+        children.append(child)
+        cursor = _align4(next_cursor)
+    return {
+        "key": key,
+        "type": value_type,
+        "value_length": value_length,
+        "value": value,
+        "children": children,
+    }, end
+
+
+def _parse_fixed_file_info(value: bytes) -> dict:
+    if len(value) < 52:
+        return {}
+    fields = struct.unpack_from("<13I", value, 0)
+    if fields[0] != 0xFEEF04BD:
+        return {}
+    return {
+        "file_version": _version_pair(fields[2], fields[3]),
+        "product_version": _version_pair(fields[4], fields[5]),
+        "file_flags": f"0x{fields[7]:08x}",
+        "file_os": f"0x{fields[8]:08x}",
+        "file_type": f"0x{fields[9]:08x}",
+        "file_subtype": f"0x{fields[10]:08x}",
+    }
+
+
+def _collect_version_info(node: dict, strings: dict[str, str], translations: list[dict]) -> None:
+    if node.get("key") == "StringFileInfo":
+        for table in node.get("children", []):
+            for item in table.get("children", []):
+                if item.get("type") != 1 or len(strings) >= MAX_PE_VERSION_STRINGS:
+                    continue
+                key = item.get("key", "")
+                value = item.get("value", b"").decode("utf-16-le", errors="replace")
+                value = value.rstrip("\x00")
+                if key and value:
+                    strings[key] = value
+    elif node.get("key") == "VarFileInfo":
+        for item in node.get("children", []):
+            if item.get("key") != "Translation":
+                continue
+            value = item.get("value", b"")
+            for offset in range(0, len(value) - 3, 4):
+                language, codepage = struct.unpack_from("<HH", value, offset)
+                translations.append(
+                    {
+                        "language": f"0x{language:04x}",
+                        "codepage": f"0x{codepage:04x}",
+                    }
+                )
+    for child in node.get("children", []):
+        _collect_version_info(child, strings, translations)
+
+
+def _version_pair(high: int, low: int) -> str:
+    return f"{high >> 16}.{high & 0xFFFF}.{low >> 16}.{low & 0xFFFF}"
+
+
+def _align4(value: int) -> int:
+    return (value + 3) & ~3
 
 
 def _resource_value(item: dict) -> str:
@@ -1382,6 +1635,9 @@ def _pe_observations(
     load_config: dict,
     delay_imports: list[dict],
     clr: dict,
+    rich_header: dict,
+    version_info: list[dict],
+    fingerprints: dict,
 ) -> list[dict]:
     observations = []
     for section in sections:
@@ -1472,6 +1728,30 @@ def _pe_observations(
                 "id": "pe_clr_runtime",
                 "detail": "CLR runtime header is present",
                 "evidence": clr.get("runtime_version", ""),
+            }
+        )
+    if fingerprints.get("imphash") or fingerprints.get("delay_imphash"):
+        observations.append(
+            {
+                "id": "pe_import_fingerprints",
+                "detail": "import fingerprint hashes are available",
+                "evidence": ",".join(sorted(fingerprints)),
+            }
+        )
+    if rich_header.get("entries"):
+        observations.append(
+            {
+                "id": "pe_rich_header",
+                "detail": "Rich header records are present",
+                "evidence": str(rich_header.get("entry_count", 0)),
+            }
+        )
+    if version_info:
+        observations.append(
+            {
+                "id": "pe_version_info",
+                "detail": "version information resources are present",
+                "evidence": str(len(version_info)),
             }
         )
     return observations
@@ -1952,6 +2232,10 @@ def _entropy(data: bytes) -> float:
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _md5(data: bytes) -> str:
+    return hashlib.md5(data).hexdigest()
 
 
 def _decode_fixed(value: bytes) -> str:

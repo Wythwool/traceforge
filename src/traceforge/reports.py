@@ -484,6 +484,9 @@ def _profile_html(profile: dict) -> str:
                 ("delay import symbols", summary.get("delay_import_symbol_count", 0)),
                 ("guard flags", summary.get("guard_flag_count", 0)),
                 ("CLR streams", summary.get("clr_stream_count", 0)),
+                ("fingerprints", summary.get("fingerprint_count", 0)),
+                ("Rich entries", summary.get("rich_header_entry_count", 0)),
+                ("version info", summary.get("version_info_count", 0)),
                 ("code ranges", summary.get("code_range_count", 0)),
                 ("functions", summary.get("function_count", 0)),
                 ("xrefs", summary.get("xref_count", 0)),
@@ -633,7 +636,17 @@ def _pe_metadata_html(details: dict) -> str:
     load_config = details.get("load_config", {})
     delay_imports = details.get("delay_imports", [])
     clr = details.get("clr", {})
+    fingerprints = details.get("fingerprints", {})
+    rich_header = details.get("rich_header", {})
+    version_info = details.get("version_info", [])
 
+    for name, value in sorted(fingerprints.items()):
+        rows.append((name, value))
+    if rich_header:
+        rows.append(("Rich header entries", rich_header.get("entry_count", 0)))
+        rows.append(("Rich XOR key", rich_header.get("xor_key", "")))
+    if version_info:
+        rows.append(("version info resources", len(version_info)))
     if exceptions:
         rows.append(("exception records", exceptions.get("count", 0)))
     if load_config:
@@ -680,6 +693,31 @@ def _pe_metadata_html(details: dict) -> str:
     if exception_rows:
         parts.append("<h4>Exception records</h4>")
         parts.append(_table(("index", "begin", "end", "unwind", "section"), exception_rows))
+
+    rich_rows = [
+        (
+            item.get("index", ""),
+            item.get("product_id", ""),
+            item.get("build_id", ""),
+            item.get("count", ""),
+        )
+        for item in rich_header.get("entries", [])[:128]
+    ]
+    if rich_rows:
+        parts.append("<h4>Rich header</h4>")
+        parts.append(_table(("index", "product id", "build id", "count"), rich_rows))
+
+    version_rows = []
+    for item in version_info:
+        fixed = item.get("fixed_file_info", {})
+        if fixed:
+            version_rows.append(("fixed", "file_version", fixed.get("file_version", "")))
+            version_rows.append(("fixed", "product_version", fixed.get("product_version", "")))
+        for key, value in item.get("strings", {}).items():
+            version_rows.append(("string", key, value))
+    if version_rows:
+        parts.append("<h4>Version info</h4>")
+        parts.append(_table(("source", "name", "value"), version_rows[:128]))
 
     delay_rows = []
     for item in delay_imports:
@@ -977,6 +1015,15 @@ def _record_address(record: dict) -> str:
 
 def _pe_metadata_summary(details: dict) -> str:
     parts = []
+    fingerprints = details.get("fingerprints", {})
+    if fingerprints.get("imphash"):
+        parts.append("imphash")
+    if fingerprints.get("delay_imphash"):
+        parts.append("delay-imphash")
+    if details.get("rich_header", {}).get("entry_count"):
+        parts.append(f"{details['rich_header']['entry_count']} Rich entries")
+    if details.get("version_info"):
+        parts.append(f"{len(details['version_info'])} version resources")
     exceptions = details.get("exceptions", {})
     if exceptions.get("count"):
         parts.append(f"{exceptions.get('count')} exception records")

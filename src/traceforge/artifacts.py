@@ -248,6 +248,39 @@ def _write_pe_metadata_csv(path: Path, report: dict) -> Path:
         def emit(source: str, name: str, value: object = "", detail: str = "") -> None:
             writer.writerow([source, name, _cell(value), detail])
 
+        for name, value in details.get("fingerprints", {}).items():
+            emit("fingerprint", name, value)
+
+        rich_header = details.get("rich_header", {})
+        if rich_header:
+            emit("rich_header", "xor_key", rich_header.get("xor_key", ""))
+            emit("rich_header", "entry_count", rich_header.get("entry_count", 0))
+            for item in rich_header.get("entries", []):
+                emit(
+                    "rich_header.entry",
+                    f"entry_{item.get('index', '')}",
+                    item.get("count", ""),
+                    (
+                        f"product_id={item.get('product_id', '')}; "
+                        f"build_id={item.get('build_id', '')}"
+                    ),
+                )
+
+        for index, item in enumerate(details.get("version_info", [])):
+            fixed = item.get("fixed_file_info", {})
+            for key in ("file_version", "product_version", "file_type", "file_os"):
+                if key in fixed:
+                    emit("version_info.fixed", key, fixed.get(key, ""), f"resource={index}")
+            for key, value in item.get("strings", {}).items():
+                emit("version_info.string", key, value, f"resource={index}")
+            for translation in item.get("translations", []):
+                emit(
+                    "version_info.translation",
+                    translation.get("language", ""),
+                    translation.get("codepage", ""),
+                    f"resource={index}",
+                )
+
         load_config = details.get("load_config", {})
         if load_config:
             for key in (

@@ -92,7 +92,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
   exports, directories, resources, CodeView/PDB debug records, TLS callbacks,
   Authenticode certificate table records, exception runtime records, load
   configuration data, Control Flow Guard flags, delay import descriptors,
-  CLR runtime headers and metadata streams, overlay metadata, entry point,
+  CLR runtime headers and metadata streams, import fingerprints, Rich header
+  compiler records, VERSIONINFO resources, overlay metadata, entry point,
   subsystem, and observations
 - ELF program headers, sections, permissions, dynamic tags, needed libraries,
   SONAME, RPATH/RUNPATH, relocation sections, and header metadata
@@ -119,9 +120,10 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
   imported function calls, external targets, call sites, and Graphviz DOT output
 - Compact format profiles with PE hardening flags, executable/writable section
   observations, overlays, TLS/debug/certificate signals, exception tables,
-  load configuration and Guard CF metadata, delay imports, CLR metadata, ELF
-  segment checks, Mach-O load-command signals, container path checks, and
-  embedded artifact markers
+  load configuration and Guard CF metadata, delay imports, CLR metadata,
+  import hashes, Rich header records, version resources, ELF segment checks,
+  Mach-O load-command signals, container path checks, and embedded artifact
+  markers
 - Optional Capstone-backed disassembly for x86, x86-64, ARM, and ARM64, with a
   built-in decoder fallback for offline baseline use
 - Built-in and JSON-defined local rule matches
@@ -161,9 +163,9 @@ Each scan writes:
 `traceforge index` writes `case_index.json` with one compact row per case:
 source file, hash, size, format, score, analyst status, tags, note count,
 indicator count, rule match count, string count, PE resource/debug/TLS/certificate
-counts, PE exception/delay-import/Guard-CF/CLR metadata counts, import/export
-counts, symbol and relocation counts, code range, function, basic-block and edge
-counts, xref count, and embedded artifact count.
+counts, PE exception/delay-import/Guard-CF/CLR/fingerprint/Rich/version metadata
+counts, import/export counts, symbol and relocation counts, code range, function,
+basic-block and edge counts, xref count, and embedded artifact count.
 
 `traceforge workspace` writes `case_index.json` and `workspace.html`.
 `workspace.html` is a self-contained browser for the cases root, with search,
@@ -231,7 +233,8 @@ does not replace an existing case unless `--overwrite` is provided.
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
 candidates, basic blocks, code xrefs, call graph edges, code edges,
-certificates, PE metadata, embedded artifacts, and string totals.
+certificates, PE metadata including fingerprints and version resources, embedded
+artifacts, and string totals.
 
 `traceforge extract FILE -o extracted` writes parsed byte ranges into an output
 folder. By default it extracts sections or segments, PE resources, and PE

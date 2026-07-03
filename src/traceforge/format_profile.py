@@ -76,6 +76,9 @@ def build_format_profile(extraction: dict, filename: str = "") -> dict:
         "clr_stream_count": details.get("clr", {})
         .get("metadata", {})
         .get("stream_count", len(details.get("clr", {}).get("metadata", {}).get("streams", []))),
+        "fingerprint_count": len(details.get("fingerprints", {})),
+        "rich_header_entry_count": details.get("rich_header", {}).get("entry_count", 0),
+        "version_info_count": len(details.get("version_info", [])),
         "embedded_count": len(format_info.get("embedded", [])),
         "code_range_count": len(code.get("ranges", [])),
         "function_count": len(code.get("functions", [])),
@@ -214,6 +217,44 @@ def _profile_pe(details: dict, observations: list[dict]) -> None:
             "Certificate table",
             "certificate table records are present",
             str(len(details.get("certificates", []))),
+        )
+    fingerprints = details.get("fingerprints", {})
+    if fingerprints.get("imphash"):
+        _add(
+            observations,
+            "pe.imphash",
+            "info",
+            "Import hash",
+            "normal imports have an imphash-style fingerprint",
+            fingerprints["imphash"],
+        )
+    if fingerprints.get("delay_imphash"):
+        _add(
+            observations,
+            "pe.delay-imphash",
+            "info",
+            "Delay import hash",
+            "delay imports have a separate fingerprint",
+            fingerprints["delay_imphash"],
+        )
+    rich_header = details.get("rich_header", {})
+    if rich_header.get("entries"):
+        _add(
+            observations,
+            "pe.rich-header",
+            "info",
+            "Rich header",
+            "Rich header compiler records were decoded",
+            str(rich_header.get("entry_count", 0)),
+        )
+    if details.get("version_info"):
+        _add(
+            observations,
+            "pe.version-info",
+            "info",
+            "Version info",
+            "version information resources were parsed",
+            str(len(details.get("version_info", []))),
         )
     if details.get("exceptions", {}).get("entries"):
         _add(

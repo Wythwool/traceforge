@@ -42,10 +42,86 @@ def build_minimal_pe() -> bytes:
     return bytes(data)
 
 
+def _pad4(data: bytes) -> bytes:
+    return data + (b"\x00" * ((4 - len(data) % 4) % 4))
+
+
+def _version_node(
+    key: str,
+    value: bytes = b"",
+    value_type: int = 0,
+    children: tuple[bytes, ...] = (),
+) -> bytes:
+    key_bytes = key.encode("utf-16-le") + b"\x00\x00"
+    value_length = len(value) // 2 if value_type == 1 else len(value)
+    body = struct.pack("<HHH", 0, value_length, value_type)
+    body += key_bytes
+    body = _pad4(body)
+    body += value
+    body = _pad4(body)
+    body += b"".join(children)
+    return struct.pack("<HHH", len(body), value_length, value_type) + body[6:]
+
+
+def _version_string(key: str, value: str) -> bytes:
+    return _version_node(key, (value + "\x00").encode("utf-16-le"), 1)
+
+
+def _build_version_resource() -> bytes:
+    fixed = struct.pack(
+        "<13I",
+        0xFEEF04BD,
+        0x00010000,
+        0x00010002,
+        0x00030004,
+        0x00050006,
+        0x00070008,
+        0x0000003F,
+        0,
+        0x00040004,
+        1,
+        0,
+        0,
+        0,
+    )
+    string_table = _version_node(
+        "040904b0",
+        children=(
+            _version_string("FileDescription", "TraceForge sample"),
+            _version_string("FileVersion", "1.2.3.4"),
+            _version_string("ProductName", "TraceForge Test"),
+        ),
+    )
+    string_file_info = _version_node("StringFileInfo", children=(string_table,))
+    translation = _version_node("Translation", struct.pack("<HH", 0x0409, 1200))
+    var_file_info = _version_node("VarFileInfo", children=(translation,))
+    return _version_node(
+        "VS_VERSION_INFO",
+        fixed,
+        0,
+        (string_file_info, var_file_info),
+    )
+
+
 def build_pe_with_metadata() -> bytes:
     data = bytearray(4096)
     data[0:2] = b"MZ"
     struct.pack_into("<I", data, 0x3C, 0x80)
+    rich_key = 0xA5A5A5A5
+    rich_values = (
+        0x536E6144,
+        0,
+        0,
+        0,
+        (0x0102 << 16) | 0x1234,
+        5,
+        (0x0103 << 16) | 0x2345,
+        2,
+    )
+    for index, value in enumerate(rich_values):
+        struct.pack_into("<I", data, 0x40 + index * 4, value ^ rich_key)
+    data[0x60:0x64] = b"Rich"
+    struct.pack_into("<I", data, 0x64, rich_key)
     data[0x80:0x84] = b"PE\x00\x00"
     coff = 0x84
     struct.pack_into("<HHIIIHH", data, coff, 0x8664, 1, 0x12345678, 0, 0, 0xF0, 0x2022)
@@ -84,15 +160,23 @@ def build_pe_with_metadata() -> bytes:
     )
 
     resource = 0x300
-    struct.pack_into("<IIHHHH", data, resource, 0, 0, 0, 0, 0, 1)
-    struct.pack_into("<II", data, resource + 16, 24, 0x80000018)
-    struct.pack_into("<IIHHHH", data, resource + 0x18, 0, 0, 0, 0, 0, 1)
-    struct.pack_into("<II", data, resource + 0x28, 1, 0x80000030)
+    struct.pack_into("<IIHHHH", data, resource, 0, 0, 0, 0, 0, 2)
+    struct.pack_into("<II", data, resource + 0x10, 16, 0x80000030)
+    struct.pack_into("<II", data, resource + 0x18, 24, 0x80000050)
     struct.pack_into("<IIHHHH", data, resource + 0x30, 0, 0, 0, 0, 0, 1)
-    struct.pack_into("<II", data, resource + 0x40, 1033, 0x48)
+    struct.pack_into("<II", data, resource + 0x40, 1, 0x80000080)
+    struct.pack_into("<IIHHHH", data, resource + 0x50, 0, 0, 0, 0, 0, 1)
+    struct.pack_into("<II", data, resource + 0x60, 1, 0x800000A0)
+    struct.pack_into("<IIHHHH", data, resource + 0x80, 0, 0, 0, 0, 0, 1)
+    struct.pack_into("<II", data, resource + 0x90, 1033, 0xC0)
+    struct.pack_into("<IIHHHH", data, resource + 0xA0, 0, 0, 0, 0, 0, 1)
+    struct.pack_into("<II", data, resource + 0xB0, 1033, 0xD0)
+    version_blob = _build_version_resource()
+    data[0xA00 : 0xA00 + len(version_blob)] = version_blob
+    struct.pack_into("<IIII", data, resource + 0xC0, 0x1800, len(version_blob), 1200, 0)
     manifest = b"<assembly><trustInfo/></assembly>"
-    data[0x390 : 0x390 + len(manifest)] = manifest
-    struct.pack_into("<IIII", data, resource + 0x48, 0x1190, len(manifest), 65001, 0)
+    data[0x770 : 0x770 + len(manifest)] = manifest
+    struct.pack_into("<IIII", data, resource + 0xD0, 0x1570, len(manifest), 65001, 0)
 
     tls = 0x420
     callback = image_base + 0x1008
@@ -124,7 +208,7 @@ def build_pe_with_metadata() -> bytes:
     struct.pack_into("<Q", data, 0x540 + 88, image_base + 0x1010)
     struct.pack_into("<Q", data, 0x540 + 112, image_base + 0x1500)
     struct.pack_into("<Q", data, 0x540 + 120, image_base + 0x1510)
-    struct.pack_into("<Q", data, 0x540 + 128, image_base + 0x1800)
+    struct.pack_into("<Q", data, 0x540 + 128, image_base + 0x17C0)
     struct.pack_into("<Q", data, 0x540 + 136, 2)
     struct.pack_into("<I", data, 0x540 + 144, 0x500)
 
@@ -271,9 +355,19 @@ def test_pe_parser_extracts_sections_and_header():
 def test_pe_parser_extracts_resources_debug_tls_and_certificates():
     result = analyze_format(build_pe_with_metadata(), "sample.exe")
     details = result["details"]
+    resources = {item["type"]: item for item in details["resources"]}
 
-    assert details["resources"][0]["type"] == "manifest"
-    assert "trustInfo" in details["resources"][0]["preview"]
+    assert "trustInfo" in resources["manifest"]["preview"]
+    assert resources["version"]["version_info"]["strings"]["FileDescription"] == (
+        "TraceForge sample"
+    )
+    assert resources["version"]["version_info"]["fixed_file_info"]["file_version"] == "1.2.3.4"
+    assert details["version_info"][0]["strings"]["ProductName"] == "TraceForge Test"
+    assert details["rich_header"]["entry_count"] == 2
+    assert details["rich_header"]["entries"][0]["product_id"] == 0x0102
+    assert len(details["fingerprints"]["delay_imphash"]) == 32
+    assert len(details["fingerprints"]["rich_hash"]) == 32
+    assert len(details["fingerprints"]["version_info_hash"]) == 32
     assert details["debug"][0]["type"] == "codeview"
     assert details["debug"][0]["codeview"]["format"] == "rsds"
     assert details["debug"][0]["codeview"]["pdb_path"].endswith("traceforge_sample.pdb")
@@ -299,6 +393,9 @@ def test_pe_parser_extracts_resources_debug_tls_and_certificates():
     assert "pe_guard_flags" in observation_ids
     assert "pe_delay_imports" in observation_ids
     assert "pe_clr_runtime" in observation_ids
+    assert "pe_import_fingerprints" in observation_ids
+    assert "pe_rich_header" in observation_ids
+    assert "pe_version_info" in observation_ids
 
 
 def test_scan_outputs_pe_resources_debug_and_graph_nodes(tmp_path):
@@ -319,6 +416,8 @@ def test_scan_outputs_pe_resources_debug_and_graph_nodes(tmp_path):
     assert "PE metadata" in html
     assert "cf_instrumented" in metadata_csv
     assert "MessageBoxW" in metadata_csv
+    assert "TraceForge sample" in metadata_csv
+    assert "rich_header.entry" in metadata_csv
     assert "MessageBoxW" in imports_csv
     assert {"resource", "debug_info", "tls_callback", "certificate"} <= {
         node["type"] for node in graph["nodes"]

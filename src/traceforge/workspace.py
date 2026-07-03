@@ -113,6 +113,9 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "clr_stream_count": details.get("clr", {})
         .get("metadata", {})
         .get("stream_count", len(details.get("clr", {}).get("metadata", {}).get("streams", []))),
+        "fingerprint_count": len(details.get("fingerprints", {})),
+        "rich_header_entry_count": details.get("rich_header", {}).get("entry_count", 0),
+        "version_info_count": len(details.get("version_info", [])),
         "import_count": _count_imports(details),
         "export_count": len(details.get("exports", [])),
         "symbol_count": len(extraction.get("symbols", {}).get("symbols", [])),
@@ -545,6 +548,25 @@ def _pe_metadata_values(extraction: dict) -> set[str]:
     details = extraction.get("format", {}).get("details", {})
 
     load_config = details.get("load_config", {})
+    for key, value in details.get("fingerprints", {}).items():
+        values.add(f"fingerprint:{key}:{value}".lower())
+    for item in details.get("rich_header", {}).get("entries", []):
+        values.add(
+            (
+                "rich:"
+                f"{item.get('product_id', '')}:"
+                f"{item.get('build_id', '')}:"
+                f"{item.get('count', '')}"
+            ).lower()
+        )
+    for item in details.get("version_info", []):
+        fixed = item.get("fixed_file_info", {})
+        for key in ("file_version", "product_version", "file_type"):
+            if fixed.get(key):
+                values.add(f"version:{key}:{fixed[key]}".lower())
+        for key, value in item.get("strings", {}).items():
+            values.add(f"version:{key}:{value}".lower())
+
     for name in load_config.get("guard_flag_names", []):
         values.add(f"guard:{name}".lower())
     for key in (

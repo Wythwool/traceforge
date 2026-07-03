@@ -1,5 +1,6 @@
 """Tests for import and API-family profiles."""
 
+import hashlib
 import json
 import struct
 
@@ -79,6 +80,11 @@ def test_api_profile_groups_import_families():
     assert {"filesystem", "network"} <= families
     assert {"kernel32", "ws2_32"} <= libraries
     assert extraction["apis"]["family_count"] == 2
+    expected = hashlib.md5(
+        b"kernel32.createfilew,ws2_32.connect",
+        usedforsecurity=False,
+    ).hexdigest()
+    assert extraction["format"]["details"]["fingerprints"]["imphash"] == expected
 
 
 def test_apis_cli_writes_json_and_csv(tmp_path, capsys):
