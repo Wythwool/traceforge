@@ -401,12 +401,15 @@ def _add_code_nodes(
 
     functions = code.get("functions", [])
     function_nodes = {}
+    function_nodes_by_name = {}
     for index, item in enumerate(functions[:MAX_GRAPH_FUNCTIONS]):
         address = item.get("address")
         if not isinstance(address, int):
             continue
         node_id = f"function:{index}"
         function_nodes[address] = node_id
+        if item.get("name"):
+            function_nodes_by_name[item["name"]] = node_id
         nodes.append(
             {
                 "id": node_id,
@@ -495,6 +498,27 @@ def _add_code_nodes(
                     "source": source_id,
                     "target": target_id,
                     "type": "calls" if item.get("kind") == "call" else "branches",
+                }
+            )
+
+    import_nodes_by_name = {
+        node.get("name", "").lower(): node.get("id")
+        for node in nodes
+        if node.get("type") == "import" and node.get("name")
+    }
+    for item in extraction.get("callgraph", {}).get("edges", [])[:MAX_GRAPH_XREFS]:
+        if item.get("target_kind") != "import":
+            continue
+        source_id = function_nodes_by_name.get(item.get("source_name", ""))
+        target_id = import_nodes_by_name.get(str(item.get("target_name", "")).lower())
+        if source_id and target_id:
+            edges.append(
+                {
+                    "source": source_id,
+                    "target": target_id,
+                    "type": "calls",
+                    "indirect": item.get("indirect", False),
+                    "count": item.get("count", 0),
                 }
             )
 

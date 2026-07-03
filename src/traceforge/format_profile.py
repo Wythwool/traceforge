@@ -20,6 +20,7 @@ def build_format_profile(extraction: dict, filename: str = "") -> dict:
     kind = format_info.get("kind", "raw")
     symbols = extraction.get("symbols", {})
     code = extraction.get("code", {})
+    callgraph = extraction.get("callgraph", {})
 
     observations: list[dict] = []
     if kind == "pe":
@@ -42,6 +43,15 @@ def build_format_profile(extraction: dict, filename: str = "") -> dict:
             f"{item.get('kind', 'unknown')} marker inside the file",
             f"offset={item.get('offset', '')}",
         )
+    if callgraph.get("import_call_count", 0):
+        _add(
+            observations,
+            "code.import-callgraph",
+            "info",
+            "Import calls resolved",
+            "code cross-references include calls to imported functions",
+            str(callgraph.get("import_call_count", 0)),
+        )
 
     section_rows = _section_rows(details)
     libraries = _library_rows(details, symbols)
@@ -59,6 +69,8 @@ def build_format_profile(extraction: dict, filename: str = "") -> dict:
         "code_range_count": len(code.get("ranges", [])),
         "function_count": len(code.get("functions", [])),
         "xref_count": len(code.get("xrefs", [])),
+        "callgraph_edge_count": callgraph.get("edge_count", 0),
+        "import_call_count": callgraph.get("import_call_count", 0),
     }
 
     return {

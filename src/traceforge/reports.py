@@ -62,6 +62,7 @@ def render_report_html(report: dict) -> str:
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
+    callgraph = extraction.get("callgraph", {})
     window = extraction["entropy"]["byte_window"]
     label = score["label"]
     title = f"TraceForge report: {manifest['file_name']}"
@@ -98,6 +99,7 @@ def render_report_html(report: dict) -> str:
         _api_profile_html(apis),
         _symbols_html(extraction.get("symbols", {})),
         _code_html(extraction.get("code", {})),
+        _callgraph_html(callgraph),
         "<h2>Score</h2>",
         f'<p><span class="badge {label}">{label}</span> '
         f"{score['score']} / {score['max_score']}</p>",
@@ -265,6 +267,7 @@ def render_summary_md(report: dict) -> str:
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
     capabilities = extraction.get("capabilities", {})
+    callgraph = extraction.get("callgraph", {})
 
     lines = [
         f"# TraceForge summary: {manifest['file_name']}",
@@ -292,6 +295,11 @@ def render_summary_md(report: dict) -> str:
             f"- Code: {len(extraction.get('code', {}).get('ranges', []))} ranges, "
             f"{len(extraction.get('code', {}).get('functions', []))} functions, "
             f"{len(extraction.get('code', {}).get('edges', []))} edges"
+        ),
+        (
+            f"- Call graph: {callgraph.get('function_count', 0)} functions, "
+            f"{callgraph.get('edge_count', 0)} edges, "
+            f"{callgraph.get('import_call_count', 0)} import calls"
         ),
         f"- Score: {score['score']}/{score['max_score']} ({score['label']})",
         "",
@@ -780,6 +788,60 @@ def _code_html(code_info: dict) -> str:
                 ],
             )
         )
+    return "\n".join(parts)
+
+
+def _callgraph_html(callgraph: dict) -> str:
+    if not callgraph:
+        return ""
+    parts = ["<h2>Call Graph</h2>"]
+    parts.append(
+        _table(
+            ("field", "value"),
+            [
+                ("architecture", callgraph.get("architecture", "unknown")),
+                ("functions", callgraph.get("function_count", 0)),
+                ("imports", callgraph.get("import_count", 0)),
+                ("externals", callgraph.get("external_count", 0)),
+                ("edges", callgraph.get("edge_count", 0)),
+                ("internal calls", callgraph.get("internal_call_count", 0)),
+                ("import calls", callgraph.get("import_call_count", 0)),
+                ("branches", callgraph.get("branch_count", 0)),
+            ],
+        )
+    )
+    edges = callgraph.get("edges", [])
+    if edges:
+        parts.append(
+            _table(
+                (
+                    "kind",
+                    "source",
+                    "target kind",
+                    "target",
+                    "indirect",
+                    "count",
+                    "sites",
+                ),
+                [
+                    (
+                        item.get("kind", ""),
+                        item.get("source_name", ""),
+                        item.get("target_kind", ""),
+                        item.get("target_name", ""),
+                        item.get("indirect", ""),
+                        item.get("count", 0),
+                        ", ".join(
+                            _hex_or_empty(site.get("address"))
+                            for site in item.get("sites", [])[:8]
+                        ),
+                    )
+                    for item in edges[:128]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No call graph edges found.</p>')
     return "\n".join(parts)
 
 

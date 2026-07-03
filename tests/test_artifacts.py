@@ -161,6 +161,51 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
                 ],
                 "edges": [],
             },
+            "callgraph": {
+                "engine": "traceforge-callgraph",
+                "format": "pe",
+                "architecture": "x86_64",
+                "node_count": 2,
+                "edge_count": 1,
+                "function_count": 2,
+                "import_count": 0,
+                "external_count": 0,
+                "internal_call_count": 1,
+                "import_call_count": 0,
+                "branch_count": 0,
+                "functions": [
+                    {
+                        "id": "function:1000",
+                        "kind": "function",
+                        "name": "entry",
+                        "address": 4096,
+                    },
+                    {
+                        "id": "function:1004",
+                        "kind": "function",
+                        "name": "sub_1004",
+                        "address": 4100,
+                    },
+                ],
+                "imports": [],
+                "externals": [],
+                "edges": [
+                    {
+                        "source": "function:1000",
+                        "source_kind": "function",
+                        "source_name": "entry",
+                        "source_address": 4096,
+                        "target": "function:1004",
+                        "target_kind": "function",
+                        "target_name": "sub_1004",
+                        "target_address": 4100,
+                        "kind": "call",
+                        "indirect": False,
+                        "count": 1,
+                        "sites": [{"address": 4096}],
+                    }
+                ],
+            },
             "profile": {
                 "observations": [
                     {
@@ -242,6 +287,8 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "code.csv",
         "blocks.csv",
         "xrefs.csv",
+        "callgraph.csv",
+        "callgraph.dot",
         "format_profile.csv",
         "api_profile.csv",
         "findings.csv",
@@ -257,6 +304,10 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "ret" in (tmp_path / "case" / "code.csv").read_text()
     assert "0x1000" in (tmp_path / "case" / "blocks.csv").read_text()
     assert "sub_1004" in (tmp_path / "case" / "xrefs.csv").read_text()
+    assert "sub_1004" in (tmp_path / "case" / "callgraph.csv").read_text()
+    assert "digraph traceforge_callgraph" in (
+        tmp_path / "case" / "callgraph.dot"
+    ).read_text()
     assert "pe.tls-callbacks" in (tmp_path / "case" / "format_profile.csv").read_text()
     assert "CreateFileW" in (tmp_path / "case" / "api_profile.csv").read_text()
     assert ".text" in (tmp_path / "case" / "sections.csv").read_text()

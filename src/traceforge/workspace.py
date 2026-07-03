@@ -68,6 +68,7 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
     fmt = extraction.get("format", {})
     details = fmt.get("details", {})
     code = extraction.get("code", {})
+    callgraph = extraction.get("callgraph", {})
     strings = extraction.get("strings", {})
     ascii_total = strings.get("ascii", {}).get("total", 0)
     utf16_total = strings.get("utf16le", {}).get("total", 0)
@@ -109,6 +110,8 @@ def summarize_case(case_dir: Path, report: dict) -> dict:
         "function_count": len(code.get("functions", [])),
         "basic_block_count": len(code.get("basic_blocks", [])),
         "xref_count": len(code.get("xrefs", [])),
+        "callgraph_edge_count": callgraph.get("edge_count", 0),
+        "import_call_count": callgraph.get("import_call_count", 0),
         "code_edge_count": len(code.get("edges", [])),
         "embedded_artifact_count": len(fmt.get("embedded", [])),
     }
@@ -147,6 +150,9 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         _basic_block_values(left_extraction), _basic_block_values(right_extraction)
     )
     xrefs = _diff_values(_xref_values(left_extraction), _xref_values(right_extraction))
+    callgraph = _diff_values(
+        _callgraph_values(left_extraction), _callgraph_values(right_extraction)
+    )
     code_edges = _diff_values(
         _code_edge_values(left_extraction), _code_edge_values(right_extraction)
     )
@@ -177,6 +183,7 @@ def diff_cases(left_case_dir: Path, right_case_dir: Path) -> dict:
         "functions": functions,
         "basic_blocks": basic_blocks,
         "xrefs": xrefs,
+        "callgraph": callgraph,
         "code_edges": code_edges,
         "certificates": certificates,
         "embedded_artifacts": embedded,
@@ -271,6 +278,10 @@ def render_diff_markdown(diff: dict) -> str:
             "## Code Xrefs",
             "",
             _render_value_counts(diff["xrefs"]),
+            "",
+            "## Call Graph",
+            "",
+            _render_value_counts(diff["callgraph"]),
             "",
             "## Code Edges",
             "",
@@ -491,6 +502,17 @@ def _code_edge_values(extraction: dict) -> set[str]:
     return values
 
 
+def _callgraph_values(extraction: dict) -> set[str]:
+    values = set()
+    for item in extraction.get("callgraph", {}).get("edges", []):
+        values.add(
+            f"{item.get('kind', '')}:{item.get('source_name', '')}->"
+            f"{item.get('target_kind', '')}:{item.get('target_name', '')}:"
+            f"{item.get('indirect', False)}".lower()
+        )
+    return values
+
+
 def _certificate_values(extraction: dict) -> set[str]:
     values = set()
     details = extraction.get("format", {}).get("details", {})
@@ -548,6 +570,7 @@ def _diff_summary(diff: dict) -> list[str]:
         ("functions", "function"),
         ("basic_blocks", "basic block"),
         ("xrefs", "code xref"),
+        ("callgraph", "call graph edge"),
         ("code_edges", "code edge"),
         ("certificates", "certificate"),
         ("embedded_artifacts", "embedded artifact"),

@@ -489,6 +489,18 @@ function renderDetail() {
       target_name: row.target_name || ""
     }))
   );
+  const callgraph = report.extraction?.callgraph || {};
+  renderRows(
+    document.getElementById("callgraph-table"),
+    ["kind", "source_name", "target_kind", "target_name", "count"],
+    (callgraph.edges || []).map(row => ({
+      kind: row.indirect ? `${row.kind} indirect` : row.kind,
+      source_name: row.source_name || "",
+      target_kind: row.target_kind || "",
+      target_name: row.target_name || "",
+      count: row.count || 0
+    }))
+  );
 }
 function renderAnnotations() {
   const notes = annotations.notes || [];
@@ -618,6 +630,8 @@ def render_case_viewer(payload: dict) -> str:
             '<div id="detail-edges"></div>',
             "<h3>Code Xrefs</h3>",
             '<div id="xref-table"></div>',
+            "<h3>Call Graph</h3>",
+            '<div id="callgraph-table"></div>',
             "<h3>Functions</h3>",
             '<div id="function-table"></div>',
             "<h3>Indicators</h3>",
@@ -646,6 +660,7 @@ def _viewer_report(report: dict) -> dict:
             "rules": extraction.get("rules", {}),
             "symbols": _cap_symbol_rows(extraction.get("symbols", {})),
             "code": _cap_code_rows(extraction.get("code", {})),
+            "callgraph": _cap_callgraph_rows(extraction.get("callgraph", {})),
             "strings": _cap_strings(extraction.get("strings", {})),
         },
     }
@@ -713,6 +728,20 @@ def _cap_code_rows(code: dict) -> dict:
         "xrefs": code.get("xrefs", [])[:MAX_VIEWER_ROWS],
         "instructions": code.get("instructions", [])[:MAX_VIEWER_ROWS],
         "edges": code.get("edges", [])[:MAX_VIEWER_ROWS],
+    }
+
+
+def _cap_callgraph_rows(callgraph: dict) -> dict:
+    return {
+        "architecture": callgraph.get("architecture", "unknown"),
+        "node_count": callgraph.get("node_count", 0),
+        "edge_count": callgraph.get("edge_count", 0),
+        "function_count": callgraph.get("function_count", 0),
+        "import_count": callgraph.get("import_count", 0),
+        "import_call_count": callgraph.get("import_call_count", 0),
+        "functions": callgraph.get("functions", [])[:MAX_VIEWER_ROWS],
+        "imports": callgraph.get("imports", [])[:MAX_VIEWER_ROWS],
+        "edges": callgraph.get("edges", [])[:MAX_VIEWER_ROWS],
     }
 
 

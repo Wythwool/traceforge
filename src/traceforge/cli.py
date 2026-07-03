@@ -10,6 +10,8 @@ from traceforge import __version__, core
 from traceforge.annotations import VALID_STATUSES
 from traceforge.api_profile import dumps as dump_api_profile
 from traceforge.api_profile import write_api_profile_csv
+from traceforge.callgraph import dumps as dump_callgraph
+from traceforge.callgraph import write_callgraph_csv, write_callgraph_dot
 from traceforge.capabilities import dumps as dump_capabilities
 from traceforge.capabilities import write_capabilities_csv
 from traceforge.carve import carve_file
@@ -298,6 +300,12 @@ def build_parser() -> argparse.ArgumentParser:
     code.add_argument("--csv", type=Path, help="write instruction preview CSV")
     code.add_argument("--blocks-csv", type=Path, help="write basic block CSV")
     code.add_argument("--xrefs-csv", type=Path, help="write code cross-reference CSV")
+
+    callgraph = sub.add_parser("callgraph", help="summarize function and import calls")
+    callgraph.add_argument("file", type=Path, help="path to a regular file")
+    callgraph.add_argument("--json", action="store_true", help="print full JSON output")
+    callgraph.add_argument("--csv", type=Path, help="write call graph edge CSV")
+    callgraph.add_argument("--dot", type=Path, help="write Graphviz DOT call graph")
 
     index = sub.add_parser("index", help="write case_index.json for a cases root")
     index.add_argument(
@@ -882,6 +890,44 @@ def _cmd_code(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_callgraph(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = core.call_graph_file(args.file)
+        if args.csv is not None:
+            write_callgraph_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+        if args.dot is not None:
+            write_callgraph_dot(args.dot, payload)
+            print(f"wrote {args.dot}")
+    except OSError as exc:
+        return _fail(f"could not build call graph for {args.file}: {exc}")
+    if args.json:
+        print(dump_callgraph(payload), end="")
+        return 0
+    print(
+        f"architecture {payload.get('architecture', 'unknown')} "
+        f"functions={payload.get('function_count', 0)} "
+        f"imports={payload.get('import_count', 0)} "
+        f"externals={payload.get('external_count', 0)} "
+        f"edges={payload.get('edge_count', 0)} "
+        f"import_calls={payload.get('import_call_count', 0)}"
+    )
+    if not payload.get("edges"):
+        print("no call graph edges")
+        return 0
+    for edge in payload.get("edges", [])[:32]:
+        indirect = " indirect" if edge.get("indirect") else ""
+        print(
+            f"{edge.get('kind', 'ref')}{indirect} "
+            f"{edge.get('source_name', '')} -> "
+            f"{edge.get('target_kind', '')}:{edge.get('target_name', '')} "
+            f"count={edge.get('count', 0)}"
+        )
+    return 0
+
+
 def _cmd_index(cases_root: Path) -> int:
     if not cases_root.exists():
         return _fail(f"cases root does not exist: {cases_root}")
@@ -1033,6 +1079,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_symbols(args)
     if args.command == "code":
         return _cmd_code(args)
+    if args.command == "callgraph":
+        return _cmd_callgraph(args)
     if args.command == "index":
         return _cmd_index(args.cases_root)
     if args.command == "db":

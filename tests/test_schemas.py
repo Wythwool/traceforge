@@ -6,6 +6,7 @@ from traceforge import cli, core
 
 EXPECTED_SCHEMAS = {
     "api-profile",
+    "callgraph",
     "capabilities",
     "case-bundle",
     "case-index",

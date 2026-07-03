@@ -22,6 +22,7 @@ from traceforge.annotations import (
 )
 from traceforge.api_profile import analyze_api_profile
 from traceforge.artifacts import write_case_artifacts
+from traceforge.callgraph import build_call_graph
 from traceforge.capabilities import analyze_capabilities
 from traceforge.code_map import inspect_code
 from traceforge.format_profile import build_format_profile
@@ -201,6 +202,7 @@ def extract(data: bytes, filename: str = "") -> dict:
     result["symbols"] = inspect_symbols(data, filename, result["format"])
     result["apis"] = analyze_api_profile(result, filename)
     result["code"] = inspect_code(data, filename, result["format"], result["symbols"])
+    result["callgraph"] = build_call_graph(result, filename)
     result["profile"] = build_format_profile(result, filename)
     result["rules"] = evaluate_rules(result)
     result["signatures"] = match_signature_set(
@@ -536,6 +538,16 @@ def api_profile_file(path: Path) -> dict:
     path = Path(path)
     extraction = extract(path.read_bytes(), path.name)
     payload = dict(extraction["apis"])
+    payload["file_name"] = path.name
+    payload["size"] = extraction["size"]
+    return payload
+
+
+def call_graph_file(path: Path) -> dict:
+    """Return a function and import call graph for one file."""
+    path = Path(path)
+    extraction = extract(path.read_bytes(), path.name)
+    payload = dict(extraction["callgraph"])
     payload["file_name"] = path.name
     payload["size"] = extraction["size"]
     return payload

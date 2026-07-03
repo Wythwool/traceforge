@@ -69,6 +69,8 @@ traceforge code FILE --json
 traceforge code FILE --csv code.csv
 traceforge code FILE --decoder capstone --blocks-csv blocks.csv
 traceforge code FILE --xrefs-csv xrefs.csv
+traceforge callgraph FILE --json
+traceforge callgraph FILE --csv callgraph.csv --dot callgraph.dot
 traceforge index                 # write .traceforge/cases/case_index.json
 traceforge db build              # write .traceforge/cases/traceforge.db
 traceforge db query --indicator example.com --json
@@ -111,6 +113,8 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Code cross-references that link call and branch sources to resolved function
   candidates, PE imported functions through IAT slots, code ranges, and offsets
   when visible
+- Call graph summaries that aggregate function-to-function calls, indirect
+  imported function calls, external targets, call sites, and Graphviz DOT output
 - Compact format profiles with PE hardening flags, executable/writable section
   observations, overlays, TLS/debug/certificate signals, ELF segment checks,
   Mach-O load-command signals, container path checks, and embedded artifact
@@ -132,19 +136,22 @@ Each scan writes:
 - `report.json` - full structured extraction and score
 - `report.html` - self-contained readable report
 - `viewer.html` - self-contained case viewer with searchable graph nodes,
-  related edges, analyst notes, code xrefs, functions, and indicators
+  related edges, analyst notes, code xrefs, call graph edges, functions, and
+  indicators
 - `summary.md` - short analyst summary
 - `annotations.json` / `annotations.md` - case status, tags, notes, and update
   history
 - `indicators.csv` / `indicators.json` - indicator exports
 - `graph.json` - evidence graph with samples, format nodes, sections, imports,
   exports, PE resources/debug metadata, code ranges, functions, basic blocks,
-  code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
+  code xrefs, import call edges, strings, indicators, rule matches, findings,
+  and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `relocations.csv`, `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`,
-  `format_profile.csv`, `api_profile.csv`, and `findings.csv` - table exports
-  for day-to-day case work
+  `relocations.csv`, `xrefs.csv`, `callgraph.csv`, `callgraph.dot`,
+  `signature_matches.csv`, `capabilities.csv`, `format_profile.csv`,
+  `api_profile.csv`, and `findings.csv` - table and graph exports for
+  day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -197,12 +204,18 @@ diagnostics, system information, synchronization, and UI usage. Scans also write
 API profile results into `report.json`, `report.html`, `summary.md`,
 `api_profile.csv`, and `findings.csv`.
 
+`traceforge callgraph FILE` builds a compact function/reference graph from code
+xrefs. It separates internal calls, imported function calls, external targets,
+branch edges, and call sites. Scans also write call graph data into
+`report.json`, `report.html`, `summary.md`, `viewer.html`, `callgraph.csv`, and
+`callgraph.dot`.
+
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
 `extract_manifest.json`, `bundle_manifest.json`, capability output, format
-profile output, API profile output, external rule sets, and external signature
-sets. These schemas are intended for pipeline validation, typed clients, and
-long-lived case archives.
+profile output, API profile output, call graph output, external rule sets, and
+external signature sets. These schemas are intended for pipeline validation,
+typed clients, and long-lived case archives.
 
 `traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
 for one stored case. The bundle contains a `bundle_manifest.json` with every
@@ -213,8 +226,8 @@ does not replace an existing case unless `--overwrite` is provided.
 `traceforge diff CASE_A CASE_B` writes `diff.json` and `diff.md`. The diff
 compares hashes, size, format, score, indicators, rule matches, imports,
 exports, sections, resources, debug records, symbols, relocations, function
-candidates, basic blocks, code xrefs, code edges, certificates, embedded
-artifacts, and string totals.
+candidates, basic blocks, code xrefs, call graph edges, code edges,
+certificates, embedded artifacts, and string totals.
 
 `traceforge extract FILE -o extracted` writes parsed byte ranges into an output
 folder. By default it extracts sections or segments, PE resources, and PE

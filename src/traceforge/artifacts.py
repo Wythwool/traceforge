@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from traceforge.api_profile import write_api_profile_csv
+from traceforge.callgraph import write_callgraph_csv, write_callgraph_dot
 from traceforge.capabilities import write_capabilities_csv
 from traceforge.code_map import write_blocks_csv, write_code_csv, write_xrefs_csv
 from traceforge.format_profile import write_profile_csv
@@ -41,6 +42,14 @@ def write_case_artifacts(
         write_code_csv(target / "code.csv", report.get("extraction", {}).get("code", {})),
         write_blocks_csv(target / "blocks.csv", report.get("extraction", {}).get("code", {})),
         write_xrefs_csv(target / "xrefs.csv", report.get("extraction", {}).get("code", {})),
+        write_callgraph_csv(
+            target / "callgraph.csv",
+            report.get("extraction", {}).get("callgraph", {}),
+        ),
+        write_callgraph_dot(
+            target / "callgraph.dot",
+            report.get("extraction", {}).get("callgraph", {}),
+        ),
         _write_signature_matches_csv(target / "signature_matches.csv", report),
         write_capabilities_csv(
             target / "capabilities.csv",
