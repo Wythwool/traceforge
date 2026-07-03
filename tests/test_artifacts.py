@@ -238,6 +238,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
         "imports.csv",
         "exports.csv",
         "symbols.csv",
+        "relocations.csv",
         "code.csv",
         "blocks.csv",
         "xrefs.csv",
@@ -249,6 +250,7 @@ def test_write_case_artifacts_exports_workbench_files(tmp_path):
     assert "CreateFileW" in (tmp_path / "case" / "imports.csv").read_text()
     assert "sample.dll" in (tmp_path / "case" / "exports.csv").read_text()
     assert "Run" in (tmp_path / "case" / "symbols.csv").read_text()
+    assert "block" in (tmp_path / "case" / "relocations.csv").read_text()
     assert "manifest" in (tmp_path / "case" / "resources.csv").read_text()
     assert "sample.pdb" in (tmp_path / "case" / "debug.csv").read_text()
     assert "pkcs_signed_data" in (tmp_path / "case" / "debug.csv").read_text()

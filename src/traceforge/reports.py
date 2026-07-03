@@ -614,6 +614,7 @@ def _symbols_html(symbol_info: dict) -> str:
     if not symbol_info:
         return ""
     parts = ["<h2>Symbols</h2>"]
+    dynamic = symbol_info.get("dynamic", {})
     parts.append(
         _table(
             ("field", "value"),
@@ -622,6 +623,9 @@ def _symbols_html(symbol_info: dict) -> str:
                 ("exports", len(symbol_info.get("exports", []))),
                 ("symbols", len(symbol_info.get("symbols", []))),
                 ("needed libraries", ", ".join(symbol_info.get("needed_libraries", []))),
+                ("soname", dynamic.get("soname", "")),
+                ("runpath", dynamic.get("runpath", "")),
+                ("rpath", dynamic.get("rpath", "")),
                 ("relocation blocks", len(symbol_info.get("relocations", []))),
             ],
         )
@@ -634,6 +638,22 @@ def _symbols_html(symbol_info: dict) -> str:
                 rows.append((source, name, item.get("kind", ""), item.get("binding", "")))
     if rows:
         parts.append(_table(("source", "name", "kind", "binding"), rows))
+    relocations = []
+    for block in symbol_info.get("relocations", []):
+        block_name = block.get("section") or _hex_or_empty(block.get("page_rva"))
+        for item in block.get("entries", [])[:128]:
+            relocations.append(
+                (
+                    block_name,
+                    item.get("type", ""),
+                    _hex_or_empty(item.get("rva", item.get("offset"))),
+                    item.get("symbol_name", ""),
+                    item.get("addend", ""),
+                )
+            )
+    if relocations:
+        parts.append("<h3>Relocations</h3>")
+        parts.append(_table(("block", "type", "offset", "symbol", "addend"), relocations[:128]))
     return "\n".join(parts)
 
 

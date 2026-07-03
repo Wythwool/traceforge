@@ -64,6 +64,7 @@ traceforge search FILE --hex "4d 5a ?? 90"
 traceforge search FILE --regex "https?://"
 traceforge symbols FILE --json
 traceforge symbols FILE --csv symbols.csv
+traceforge symbols FILE --relocations-csv relocations.csv
 traceforge code FILE --json
 traceforge code FILE --csv code.csv
 traceforge code FILE --decoder capstone --blocks-csv blocks.csv
@@ -89,15 +90,17 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
   exports, directories, resources, CodeView/PDB debug records, TLS callbacks,
   Authenticode certificate table records, overlay metadata, entry point,
   subsystem, and observations
-- ELF program headers, sections, permissions, and header metadata
+- ELF program headers, sections, permissions, dynamic tags, needed libraries,
+  SONAME, RPATH/RUNPATH, relocation sections, and header metadata
 - Mach-O load commands, linked libraries, segments, sections, and header metadata
 - ZIP/APK/JAR entries, APK permissions when visible, DEX/native-library counts,
   and JAR manifest preview
 - WASM sections, imports, and exports
 - Embedded artifact signatures inside larger byte streams
 - Search results with file offsets, match context, and section names when known
-- Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, and PE
-  base relocation blocks
+- Visible PE/ELF/Mach-O symbols, imports, exports, needed libraries, PE base
+  relocation blocks, and ELF REL/RELA relocation entries with symbol names when
+  visible
 - Normalized API import profiles with library categories and API-family groups
   for network, filesystem, registry, process/thread, memory loading,
   cryptography, compression, services, diagnostics, system information,
@@ -139,7 +142,7 @@ Each scan writes:
   code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`,
+  `relocations.csv`, `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`,
   `format_profile.csv`, `api_profile.csv`, and `findings.csv` - table exports
   for day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection

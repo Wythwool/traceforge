@@ -34,6 +34,25 @@ ELF_SYMBOL_TYPES = {
     6: "tls",
 }
 ELF_DYNAMIC_TAGS = {0: "null", 1: "needed", 14: "soname", 15: "rpath", 29: "runpath"}
+ELF_X86_64_RELOCATION_TYPES = {
+    1: "64",
+    2: "pc32",
+    5: "copy",
+    6: "glob_dat",
+    7: "jump_slot",
+    8: "relative",
+    10: "32",
+    11: "32s",
+    37: "irelative",
+}
+ELF_I386_RELOCATION_TYPES = {
+    1: "32",
+    2: "pc32",
+    5: "copy",
+    6: "glob_dat",
+    7: "jump_slot",
+    8: "relative",
+}
 
 
 def inspect_symbols_file(path: Path) -> dict:
@@ -84,6 +103,43 @@ def write_symbols_csv(path: Path, payload: dict) -> Path:
                         item.get("section", item.get("section_index", "")),
                         item.get("value", ""),
                         item.get("size", ""),
+                    ]
+                )
+    return Path(path)
+
+
+def write_relocations_csv(path: Path, payload: dict) -> Path:
+    """Write relocation entries as a flat CSV table."""
+    with Path(path).open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "block",
+                "source",
+                "offset",
+                "rva",
+                "type",
+                "type_id",
+                "symbol",
+                "symbol_index",
+                "addend",
+            ]
+        )
+        for block in payload.get("relocations", []):
+            block_name = block.get("section") or _hex_or_empty(block.get("page_rva"))
+            source = block.get("source", "")
+            for item in block.get("entries", []):
+                writer.writerow(
+                    [
+                        block_name,
+                        source,
+                        _hex_or_empty(item.get("offset")),
+                        _hex_or_empty(item.get("rva")),
+                        item.get("type", ""),
+                        item.get("type_id", ""),
+                        item.get("symbol_name", ""),
+                        item.get("symbol_index", ""),
+                        item.get("addend", ""),
                     ]
                 )
     return Path(path)
@@ -174,11 +230,14 @@ def _inspect_elf(data: bytes, details: dict) -> dict:
     sections = details.get("sections", [])
     symbols = _parse_elf_symbols(data, endian, is_64, sections)
     dynamic = _parse_elf_dynamic(data, endian, is_64, sections)
+    relocations = _parse_elf_relocations(data, endian, is_64, sections, symbols)
     return {
         "symbols": symbols,
         "imports": _undefined_symbols(symbols),
         "exports": _defined_exports(symbols),
         "needed_libraries": dynamic["needed_libraries"],
+        "dynamic": dynamic,
+        "relocations": relocations,
     }
 
 
@@ -209,6 +268,7 @@ def _parse_elf_symbols(data: bytes, endian: str, is_64: bool, sections: list[dic
             symbols.append(
                 {
                     "table": section.get("name", ""),
+                    "table_section_index": section.get("index"),
                     "index": index,
                     "name": name,
                     "binding": ELF_SYMBOL_BINDINGS.get(info >> 4, f"0x{info >> 4:x}"),
@@ -227,6 +287,10 @@ def _parse_elf_symbols(data: bytes, endian: str, is_64: bool, sections: list[dic
 
 def _parse_elf_dynamic(data: bytes, endian: str, is_64: bool, sections: list[dict]) -> dict:
     needed = []
+    soname = ""
+    rpath = ""
+    runpath = ""
+    entries = []
     for section in sections:
         if section.get("type_name") != "dynamic":
             continue
@@ -245,13 +309,131 @@ def _parse_elf_dynamic(data: bytes, endian: str, is_64: bool, sections: list[dic
                 if is_64
                 else struct.unpack_from(f"{endian}iI", data, offset)
             )
+            tag_name = ELF_DYNAMIC_TAGS.get(tag, f"0x{tag:x}")
+            entry = {
+                "index": index,
+                "section": section.get("name", ""),
+                "tag": tag_name,
+                "tag_id": tag,
+                "value": value,
+            }
             if tag == 1 and strings:
                 name = _read_c_string(strings, value)
                 if name:
                     needed.append(name)
+                    entry["string"] = name
+            elif tag == 14 and strings:
+                soname = _read_c_string(strings, value)
+                entry["string"] = soname
+            elif tag == 15 and strings:
+                rpath = _read_c_string(strings, value)
+                entry["string"] = rpath
+            elif tag == 29 and strings:
+                runpath = _read_c_string(strings, value)
+                entry["string"] = runpath
+            entries.append(entry)
             if ELF_DYNAMIC_TAGS.get(tag) == "null":
                 break
-    return {"needed_libraries": needed}
+    return {
+        "needed_libraries": needed,
+        "soname": soname,
+        "rpath": rpath,
+        "runpath": runpath,
+        "entries": entries[:MAX_SYMBOLS],
+    }
+
+
+def _parse_elf_relocations(
+    data: bytes,
+    endian: str,
+    is_64: bool,
+    sections: list[dict],
+    symbols: list[dict],
+) -> list[dict]:
+    symbols_by_table = {
+        (item.get("table_section_index"), item.get("index")): item
+        for item in symbols
+    }
+    blocks = []
+    for section in sections:
+        kind = section.get("type_name")
+        if kind not in {"rel", "rela"}:
+            continue
+        entry_size = section.get("entry_size") or _elf_relocation_entry_size(is_64, kind)
+        if entry_size <= 0:
+            continue
+        entries = []
+        total = min(section.get("size", 0) // entry_size, MAX_RELOCATIONS)
+        for index in range(total):
+            offset = section.get("offset", 0) + index * entry_size
+            if offset + entry_size > len(data):
+                break
+            entry = _parse_elf_relocation_entry(data, endian, is_64, kind, offset)
+            symbol = symbols_by_table.get((section.get("link"), entry["symbol_index"]), {})
+            if symbol:
+                entry["symbol_name"] = symbol.get("name", "")
+                entry["symbol_kind"] = symbol.get("kind", "")
+                entry["symbol_binding"] = symbol.get("binding", "")
+            entries.append(entry)
+        if entries:
+            target_section = ""
+            info = section.get("info")
+            if isinstance(info, int) and 0 <= info < len(sections):
+                target_section = sections[info].get("name", "")
+            blocks.append(
+                {
+                    "section": section.get("name", ""),
+                    "source": kind,
+                    "target_section": target_section,
+                    "entries": entries,
+                }
+            )
+    return blocks[:MAX_RELOCATIONS]
+
+
+def _parse_elf_relocation_entry(
+    data: bytes,
+    endian: str,
+    is_64: bool,
+    kind: str,
+    offset: int,
+) -> dict:
+    if is_64:
+        r_offset, r_info = struct.unpack_from(f"{endian}QQ", data, offset)
+        cursor = offset + 16
+        symbol_index = r_info >> 32
+        type_id = r_info & 0xFFFFFFFF
+    else:
+        r_offset, r_info = struct.unpack_from(f"{endian}II", data, offset)
+        cursor = offset + 8
+        symbol_index = r_info >> 8
+        type_id = r_info & 0xFF
+    entry = {
+        "offset": r_offset,
+        "rva": r_offset,
+        "type": _elf_relocation_type(type_id, is_64),
+        "type_id": type_id,
+        "symbol_index": symbol_index,
+    }
+    if kind == "rela":
+        addend = (
+            struct.unpack_from(f"{endian}q", data, cursor)[0]
+            if is_64
+            else struct.unpack_from(f"{endian}i", data, cursor)[0]
+        )
+        entry["addend"] = addend
+    return entry
+
+
+def _elf_relocation_entry_size(is_64: bool, kind: str) -> int:
+    if is_64:
+        return 24 if kind == "rela" else 16
+    return 12 if kind == "rela" else 8
+
+
+def _elf_relocation_type(type_id: int, is_64: bool) -> str:
+    names = ELF_X86_64_RELOCATION_TYPES if is_64 else ELF_I386_RELOCATION_TYPES
+    return names.get(type_id, f"0x{type_id:x}")
 
 
 def _inspect_macho(data: bytes) -> dict:
@@ -396,6 +578,10 @@ def _u32(data: bytes, offset: int) -> int:
     if offset + 4 > len(data):
         raise AnalysisError("field extends past end of data")
     return struct.unpack_from("<I", data, offset)[0]
+
+
+def _hex_or_empty(value: int | None) -> str:
+    return "" if value is None else f"0x{value:x}"
 
 
 def dumps(payload: dict) -> str:

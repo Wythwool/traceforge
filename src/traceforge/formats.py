@@ -163,6 +163,14 @@ ELF_SECTION_FLAGS = {
     0x400: "tls",
 }
 
+ELF_DYNAMIC_TAGS = {
+    0: "null",
+    1: "needed",
+    14: "soname",
+    15: "rpath",
+    29: "runpath",
+}
+
 MACHO_CPU_TYPES = {
     7: "x86",
     12: "arm",
@@ -384,6 +392,7 @@ def parse_elf(data: bytes) -> dict:
         e_type, e_machine, version, entry, phoff, shoff, flags, ehsize, phentsize, phnum, shentsize, shnum, shstrndx = fields
     sections = _parse_elf_sections(data, endian, is_64, shoff, shentsize, shnum, shstrndx)
     program_headers = _parse_elf_program_headers(data, endian, is_64, phoff, phentsize, phnum)
+    dynamic = _parse_elf_dynamic(data, endian, is_64, sections)
     return {
         "class": "elf64" if is_64 else "elf32",
         "endian": "little" if endian == "<" else "big",
@@ -400,7 +409,8 @@ def parse_elf(data: bytes) -> dict:
         "flags": f"0x{flags:x}",
         "header_size": ehsize,
         "sections": sections,
-        "needed_libraries": [],
+        "dynamic": dynamic,
+        "needed_libraries": dynamic["needed_libraries"],
         "imports": [],
         "exports": [],
     }
@@ -1093,6 +1103,64 @@ def _parse_elf_program_headers(
             }
         )
     return headers
+
+
+def _parse_elf_dynamic(data: bytes, endian: str, is_64: bool, sections: list[dict]) -> dict:
+    needed = []
+    soname = ""
+    rpath = ""
+    runpath = ""
+    entries = []
+    for section in sections:
+        if section.get("type_name") != "dynamic":
+            continue
+        strings = b""
+        link = section.get("link")
+        if isinstance(link, int) and 0 <= link < len(sections):
+            strings = _slice(data, sections[link].get("offset", 0), sections[link].get("size", 0))
+        entry_size = section.get("entry_size") or (16 if is_64 else 8)
+        if entry_size <= 0:
+            continue
+        total = min(section.get("size", 0) // entry_size, MAX_IMPORTS)
+        for index in range(total):
+            offset = section.get("offset", 0) + index * entry_size
+            if offset + entry_size > len(data):
+                break
+            tag, value = (
+                struct.unpack_from(f"{endian}qQ", data, offset)
+                if is_64
+                else struct.unpack_from(f"{endian}iI", data, offset)
+            )
+            tag_name = ELF_DYNAMIC_TAGS.get(tag, f"0x{tag:x}")
+            entry = {
+                "index": index,
+                "section": section.get("name", ""),
+                "tag": tag_name,
+                "tag_id": tag,
+                "value": value,
+            }
+            if tag in {1, 14, 15, 29} and strings:
+                text = _read_c_string(strings, value)
+                if text:
+                    entry["string"] = text
+                    if tag == 1:
+                        needed.append(text)
+                    elif tag == 14:
+                        soname = text
+                    elif tag == 15:
+                        rpath = text
+                    elif tag == 29:
+                        runpath = text
+            entries.append(entry)
+            if tag == 0:
+                break
+    return {
+        "needed_libraries": needed,
+        "soname": soname,
+        "rpath": rpath,
+        "runpath": runpath,
+        "entries": entries,
+    }
 
 
 def _elf_section_for_address(sections: list[dict], address: int) -> str | None:

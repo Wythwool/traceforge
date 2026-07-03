@@ -223,6 +223,7 @@ def _profile_pe(details: dict, observations: list[dict]) -> None:
 
 
 def _profile_elf(details: dict, symbols: dict, observations: list[dict]) -> None:
+    dynamic = details.get("dynamic", {})
     for section in details.get("sections", []):
         name = section.get("name", "")
         permissions = section.get("permissions", "")
@@ -277,6 +278,38 @@ def _profile_elf(details: dict, symbols: dict, observations: list[dict]) -> None
             "Needed libraries",
             "dynamic library dependencies are present",
             ", ".join(symbols.get("needed_libraries", [])[:8]),
+        )
+    if dynamic.get("soname"):
+        _add(
+            observations,
+            "elf.soname",
+            "info",
+            "Shared object name",
+            "ELF dynamic section exposes a SONAME",
+            dynamic["soname"],
+        )
+    if dynamic.get("runpath") or dynamic.get("rpath"):
+        value = dynamic.get("runpath") or dynamic.get("rpath")
+        _add(
+            observations,
+            "elf.runtime-search-path",
+            "low",
+            "Runtime library search path",
+            "ELF dynamic section contains RUNPATH or RPATH",
+            value,
+        )
+    relocation_count = sum(
+        len(block.get("entries", []))
+        for block in symbols.get("relocations", [])
+    )
+    if relocation_count:
+        _add(
+            observations,
+            "elf.relocations",
+            "info",
+            "Relocation records",
+            "ELF relocation sections are present",
+            str(relocation_count),
         )
     if not symbols.get("symbols") and details.get("section_count", 0):
         _add(

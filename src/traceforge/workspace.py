@@ -429,9 +429,19 @@ def _symbol_values(extraction: dict) -> set[str]:
 def _relocation_values(extraction: dict) -> set[str]:
     values = set()
     for block in extraction.get("symbols", {}).get("relocations", []):
-        page = block.get("page_rva", 0)
+        page = block.get("page_rva")
+        section = block.get("section", "")
         for entry in block.get("entries", []):
-            values.add(f"{page:x}:{entry.get('type', '')}:{entry.get('rva', 0):x}".lower())
+            address = entry.get("rva", entry.get("offset", 0))
+            address_text = f"{address:x}" if isinstance(address, int) else str(address)
+            if isinstance(page, int):
+                prefix = f"{page:x}"
+            else:
+                prefix = str(section)
+            values.add(
+                f"{prefix}:{entry.get('type', '')}:{address_text}:"
+                f"{entry.get('symbol_name', '')}".lower()
+            )
     return values
 
 

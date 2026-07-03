@@ -21,7 +21,7 @@ from traceforge.search import search_file
 from traceforge.signatures import dumps as dump_signatures
 from traceforge.signatures import write_signature_csv
 from traceforge.symbols import dumps as dump_symbols
-from traceforge.symbols import inspect_symbols_file, write_symbols_csv
+from traceforge.symbols import inspect_symbols_file, write_relocations_csv, write_symbols_csv
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -284,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     symbols.add_argument("file", type=Path, help="path to a regular file")
     symbols.add_argument("--json", action="store_true", help="print full JSON output")
     symbols.add_argument("--csv", type=Path, help="write a flat symbol CSV")
+    symbols.add_argument("--relocations-csv", type=Path, help="write relocation CSV")
 
     code = sub.add_parser("code", help="map executable ranges and instruction previews")
     code.add_argument("file", type=Path, help="path to a regular file")
@@ -816,6 +817,9 @@ def _cmd_symbols(args: argparse.Namespace) -> int:
         if args.csv is not None:
             write_symbols_csv(args.csv, payload)
             print(f"wrote {args.csv}")
+        if args.relocations_csv is not None:
+            write_relocations_csv(args.relocations_csv, payload)
+            print(f"wrote {args.relocations_csv}")
     except OSError as exc:
         return _fail(f"could not inspect symbols for {args.file}: {exc}")
     if args.json:
@@ -831,7 +835,10 @@ def _cmd_symbols(args: argparse.Namespace) -> int:
                 print(f"{name} {row['name']} {row.get('kind', '')}".rstrip())
     for block in payload.get("relocations", []):
         count = len(block.get("entries", []))
-        print(f"relocations page=0x{block.get('page_rva', 0):x} count={count}")
+        if block.get("section"):
+            print(f"relocations section={block.get('section')} count={count}")
+        else:
+            print(f"relocations page=0x{block.get('page_rva', 0):x} count={count}")
     if not any(payload.get(key) for key in ("imports", "exports", "symbols", "relocations")):
         print("no visible symbols or relocations")
     return 0
