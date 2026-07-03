@@ -41,6 +41,8 @@ traceforge rules FILE            # evaluate built-in local rules
 traceforge rules FILE --rules rules.json
 traceforge signatures FILE       # match built-in local signatures
 traceforge signatures FILE --signatures signatures.json --csv signatures.csv
+traceforge capabilities FILE     # group static capability evidence
+traceforge capabilities FILE --csv capabilities.csv
 traceforge ruleset validate rules.json
 traceforge ruleset list rules.json
 traceforge ruleset export -o built-in-rules.json
@@ -103,6 +105,9 @@ traceforge diff CASE_A CASE_B    # write JSON and Markdown case diff
 - Built-in and JSON-defined local rule matches
 - Built-in and JSON-defined local signature matches with text, UTF-16LE text,
   hex wildcard, regex, and offset-constrained patterns
+- Static capability groups for network, filesystem, registry, process,
+  memory/code loading, cryptography, compression, scripting, diagnostics,
+  system information, and service-control evidence
 
 ## Case Output
 
@@ -122,8 +127,8 @@ Each scan writes:
   code xrefs, strings, indicators, rule matches, findings, and embedded artifacts
 - `strings.csv`, `chunks.csv`, `sections.csv`, `resources.csv`, `debug.csv`,
   `imports.csv`, `exports.csv`, `symbols.csv`, `code.csv`, `blocks.csv`,
-  `xrefs.csv`, `signature_matches.csv`, and `findings.csv` - table exports for
-  day-to-day case work
+  `xrefs.csv`, `signature_matches.csv`, `capabilities.csv`, and `findings.csv`
+  - table exports for day-to-day case work
 - `hexdump.txt` - bounded source byte view for quick inspection
 - `artifacts.json` - manifest for generated workbench files
 
@@ -156,11 +161,17 @@ UTF-16LE text, hex bytes with `??` wildcards, regular expressions over extracted
 string runs, exact offsets, and per-pattern match caps. Scans also write built-in
 signature results into `report.json` and `signature_matches.csv`.
 
+`traceforge capabilities FILE` groups static evidence into analyst-friendly
+capability categories. It uses extracted strings, indicators, imports, symbols,
+format facts, and signature matches. Scans also write capability results into
+`report.json`, `report.html`, `summary.md`, `capabilities.csv`, and
+`findings.csv`.
+
 `traceforge schema` lists, prints, or exports JSON Schemas for the main
 machine-readable files: `report.json`, `case_index.json`, `hunt.json`,
-`extract_manifest.json`, `bundle_manifest.json`, external rule sets, and
-external signature sets. These schemas are intended for pipeline validation,
-typed clients, and long-lived case archives.
+`extract_manifest.json`, `bundle_manifest.json`, capability output, external
+rule sets, and external signature sets. These schemas are intended for pipeline
+validation, typed clients, and long-lived case archives.
 
 `traceforge bundle create CASE_DIR -o case.traceforge.zip` writes a portable zip
 for one stored case. The bundle contains a `bundle_manifest.json` with every

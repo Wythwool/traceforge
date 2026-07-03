@@ -6,6 +6,7 @@ import csv
 import json
 from pathlib import Path
 
+from traceforge.capabilities import write_capabilities_csv
 from traceforge.code_map import write_blocks_csv, write_code_csv, write_xrefs_csv
 
 DEFAULT_HEXDUMP_LIMIT = 8192
@@ -34,6 +35,10 @@ def write_case_artifacts(
         write_blocks_csv(target / "blocks.csv", report.get("extraction", {}).get("code", {})),
         write_xrefs_csv(target / "xrefs.csv", report.get("extraction", {}).get("code", {})),
         _write_signature_matches_csv(target / "signature_matches.csv", report),
+        write_capabilities_csv(
+            target / "capabilities.csv",
+            report.get("extraction", {}).get("capabilities", {}),
+        ),
         _write_findings_csv(target / "findings.csv", report),
     ]
 
@@ -282,6 +287,20 @@ def _write_findings_csv(path: Path, report: dict) -> Path:
                     match.get("name", ""),
                     match.get("description", ""),
                     "; ".join(match.get("evidence", [])),
+                ]
+            )
+        for item in report.get("extraction", {}).get("capabilities", {}).get("categories", []):
+            writer.writerow(
+                [
+                    "capability",
+                    item.get("id", ""),
+                    item.get("confidence", ""),
+                    item.get("name", ""),
+                    item.get("description", ""),
+                    "; ".join(
+                        f"{evidence.get('source', '')}:{evidence.get('value', '')}"
+                        for evidence in item.get("evidence", [])[:10]
+                    ),
                 ]
             )
         for item in _observations(report):

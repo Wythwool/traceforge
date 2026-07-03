@@ -59,6 +59,7 @@ def render_report_html(report: dict) -> str:
     format_info = extraction.get("format", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
+    capabilities = extraction.get("capabilities", {})
     window = extraction["entropy"]["byte_window"]
     label = score["label"]
     title = f"TraceForge report: {manifest['file_name']}"
@@ -171,6 +172,28 @@ def render_report_html(report: dict) -> str:
     else:
         parts.append('<p class="note">No local signatures matched.</p>')
 
+    parts.append(f"<h2>Capabilities ({capabilities.get('category_count', 0)})</h2>")
+    if capabilities.get("categories"):
+        parts.append(
+            _table(
+                ("id", "confidence", "name", "evidence"),
+                [
+                    (
+                        item["id"],
+                        item["confidence"],
+                        item["name"],
+                        "; ".join(
+                            f"{evidence.get('source', '')}:{evidence.get('value', '')}"
+                            for evidence in item.get("evidence", [])[:5]
+                        ),
+                    )
+                    for item in capabilities["categories"]
+                ],
+            )
+        )
+    else:
+        parts.append('<p class="note">No capability groups found.</p>')
+
     parts.append("<h2>Entropy</h2>")
     parts.append(
         _table(
@@ -235,6 +258,7 @@ def render_summary_md(report: dict) -> str:
     format_info = extraction.get("format", {})
     rules = extraction.get("rules", {})
     signatures = extraction.get("signatures", {})
+    capabilities = extraction.get("capabilities", {})
 
     lines = [
         f"# TraceForge summary: {manifest['file_name']}",
@@ -286,6 +310,15 @@ def render_summary_md(report: dict) -> str:
         lines.extend(
             f"- {match['id']} ({match['level']}): {match['name']}"
             for match in signatures["matches"]
+        )
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Capabilities"])
+    if capabilities.get("categories"):
+        lines.extend(
+            f"- {item['id']} ({item['confidence']}): {item['name']}"
+            for item in capabilities["categories"]
         )
     else:
         lines.append("- none")

@@ -21,6 +21,7 @@ from traceforge.annotations import (
     load_annotations as load_case_annotations_file,
 )
 from traceforge.artifacts import write_case_artifacts
+from traceforge.capabilities import analyze_capabilities
 from traceforge.code_map import inspect_code
 from traceforge.formats import analyze_format
 from traceforge.graph import build_graph
@@ -203,6 +204,7 @@ def extract(data: bytes, filename: str = "") -> dict:
         filename=filename,
         format_info=result["format"],
     )
+    result["capabilities"] = analyze_capabilities(result)
     return result
 
 
@@ -525,6 +527,16 @@ def evaluate_file_rules(path: Path, rules_path: Path | None = None) -> dict:
 def evaluate_file_signatures(path: Path, signatures_path: Path | None = None) -> dict:
     """Match built-in or external local signatures for one file."""
     return match_file_signatures(path, signatures_path)
+
+
+def evaluate_file_capabilities(path: Path) -> dict:
+    """Return static capability groups for one file."""
+    path = Path(path)
+    extraction = extract(path.read_bytes(), path.name)
+    payload = dict(extraction["capabilities"])
+    payload["file_name"] = path.name
+    payload["size"] = extraction["size"]
+    return payload
 
 
 def extract_file_payloads_to_dir(

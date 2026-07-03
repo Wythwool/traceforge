@@ -8,6 +8,8 @@ from pathlib import Path
 
 from traceforge import __version__, core
 from traceforge.annotations import VALID_STATUSES
+from traceforge.capabilities import dumps as dump_capabilities
+from traceforge.capabilities import write_capabilities_csv
 from traceforge.carve import carve_file
 from traceforge.code_map import dumps as dump_code
 from traceforge.code_map import inspect_code_file, write_blocks_csv, write_code_csv, write_xrefs_csv
@@ -129,6 +131,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     signatures.add_argument("--json", action="store_true", help="print full JSON output")
     signatures.add_argument("--csv", type=Path, help="write flat signature CSV")
+
+    capabilities = sub.add_parser("capabilities", help="group static capabilities for one file")
+    capabilities.add_argument("file", type=Path, help="path to a regular file")
+    capabilities.add_argument("--json", action="store_true", help="print full JSON output")
+    capabilities.add_argument("--csv", type=Path, help="write capability CSV")
 
     ruleset = sub.add_parser("ruleset", help="validate, list, or export rule files")
     ruleset_sub = ruleset.add_subparsers(dest="ruleset_command", required=True)
@@ -534,6 +541,32 @@ def _cmd_signatures(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_capabilities(args: argparse.Namespace) -> int:
+    if not args.file.is_file():
+        return _fail(f"not a regular file: {args.file}")
+    try:
+        payload = core.evaluate_file_capabilities(args.file)
+        if args.csv is not None:
+            write_capabilities_csv(args.csv, payload)
+            print(f"wrote {args.csv}")
+    except OSError as exc:
+        return _fail(f"could not analyze capabilities for {args.file}: {exc}")
+    if args.json:
+        print(dump_capabilities(payload), end="")
+        return 0
+    if not payload["categories"]:
+        print("no capability groups")
+        return 0
+    for item in payload["categories"]:
+        print(
+            f"{item['id']} {item['confidence']} "
+            f"evidence={item['evidence_count']} {item['name']}"
+        )
+        for evidence in item.get("evidence", [])[:3]:
+            print(f"  {evidence['source']}:{evidence['value']}")
+    return 0
+
+
 def _cmd_ruleset(args: argparse.Namespace) -> int:
     if args.rules_path is not None and not args.rules_path.is_file():
         return _fail(f"rule file not found: {args.rules_path}")
@@ -890,6 +923,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_rules(args.file, args.rules_path)
     if args.command == "signatures":
         return _cmd_signatures(args)
+    if args.command == "capabilities":
+        return _cmd_capabilities(args)
     if args.command == "ruleset":
         return _cmd_ruleset(args)
     if args.command == "schema":
